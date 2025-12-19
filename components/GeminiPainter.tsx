@@ -10,12 +10,12 @@ import {
   Loader2, Palette, Eraser, Download, Eye, Settings, Trash2, Maximize, Hand as HandIcon,
   Type, Timer, Sun, Moon, Image as ImageIcon, CheckCircle2, Camera,
   X, Printer, Share2, MessageCircle, ChevronRight, ChevronLeft, Keyboard,
-  Plus, Layers, Box, Zap, MousePointer, ZoomIn, ZoomOut, Video, Film, Save, RefreshCw, Copy
+  Plus, Layers, Box, Zap, MousePointer, ZoomIn, ZoomOut, Video, Film, Save, RefreshCw, Copy, Scan
 } from 'lucide-react';
 
 const PINCH_THRESHOLD = 0.035; 
 const FIST_THRESHOLD = 0.08; 
-const VIRTUAL_PRESS_DURATION = 3000; // 3 seconds for HUD buttons
+const VIRTUAL_PRESS_DURATION = 3000; // 3 seconds per request
 
 const COLORS: Record<PaintColor, string> = {
   red: '#ef5350',
@@ -32,7 +32,9 @@ const COLORS: Record<PaintColor, string> = {
   teal: '#00bfa5',
   gold: '#ffd600',
   silver: '#bdbdbd',
-  brown: '#795548'
+  brown: '#795548',
+  indigo: '#3f51b5',
+  rose: '#e91e63'
 };
 
 const GeminiPainter: React.FC = () => {
@@ -88,7 +90,6 @@ const GeminiPainter: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [capturedVideo, setCapturedVideo] = useState<string | null>(null);
   const [showKeyboard, setShowKeyboard] = useState(false);
-  const [buttonProgress, setButtonProgress] = useState<Record<string, number>>({});
 
   const clearCanvas = useCallback(() => {
     const dctx = drawingCanvasRef.current?.getContext('2d');
@@ -97,15 +98,8 @@ const GeminiPainter: React.FC = () => {
   }, []);
 
   const saveToGallery = useCallback(() => {
-    if (!drawingCanvasRef.current || !canvasRef.current) return;
-    // Create a composite for the gallery
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvasRef.current.width;
-    tempCanvas.height = canvasRef.current.height;
-    const tctx = tempCanvas.getContext('2d')!;
-    tctx.drawImage(canvasRef.current, 0, 0);
-    
-    const currentData = tempCanvas.toDataURL();
+    if (!drawingCanvasRef.current) return;
+    const currentData = drawingCanvasRef.current.toDataURL();
     setGallery(prev => [{ id: Date.now().toString(), dataUrl: currentData, timestamp: Date.now() }, ...prev]);
   }, []);
 
@@ -131,28 +125,35 @@ const GeminiPainter: React.FC = () => {
   const stopRecording = () => {
     recorderRef.current?.stop();
     setIsRecording(false);
+    // Auto-open Cheese with video
+    setCapturedImage(drawingCanvasRef.current?.toDataURL() || null);
   };
 
   const takeSnapshot = useCallback(() => {
     if (!canvasRef.current) return;
     setCapturedImage(canvasRef.current.toDataURL());
-  }, []);
+    saveToGallery();
+  }, [saveToGallery]);
 
-  const shareWork = async () => {
+  // Added shareWork function to fix "Cannot find name 'shareWork'" error
+  const shareWork = useCallback(async () => {
+    if (!capturedImage) return;
     try {
-      if (navigator.share && capturedImage) {
-        const blob = await (await fetch(capturedImage)).blob();
-        const file = new File([blob], 'orel-gold-art.png', { type: 'image/png' });
+      if (navigator.share) {
+        const response = await fetch(capturedImage);
+        const blob = await response.blob();
+        const file = new File([blob], 'art.png', { type: 'image/png' });
         await navigator.share({
-          files: [file],
           title: 'היצירה שלי - סטודיו אוראל גולד',
-          text: 'ראו מה יצרתי!'
+          files: [file],
         });
+      } else {
+        alert("שיתוף לא נתמך בדפדפן זה. ניתן להוריד את התמונה.");
       }
     } catch (err) {
-      console.log('Share failed', err);
+      console.error("Error sharing:", err);
     }
-  };
+  }, [capturedImage]);
 
   const startCountdown = () => {
     let count = 3;
@@ -168,33 +169,6 @@ const GeminiPainter: React.FC = () => {
     }, 1000);
   };
 
-  const multiCheese = useCallback(() => {
-    if (gallery.length === 0) return;
-    const cols = 3;
-    const rows = Math.ceil(gallery.length / cols);
-    const boardWidth = 640;
-    const boardHeight = 360;
-    const summaryCanvas = document.createElement('canvas');
-    summaryCanvas.width = cols * boardWidth;
-    summaryCanvas.height = rows * boardHeight;
-    const sctx = summaryCanvas.getContext('2d')!;
-    
-    let loaded = 0;
-    gallery.forEach((board, i) => {
-      const img = new Image();
-      img.onload = () => {
-        const x = (i % cols) * boardWidth;
-        const y = Math.floor(i / cols) * boardHeight;
-        sctx.drawImage(img, x, y, boardWidth, boardHeight);
-        loaded++;
-        if (loaded === gallery.length) {
-          setCapturedImage(summaryCanvas.toDataURL());
-        }
-      };
-      img.src = board.dataUrl;
-    });
-  }, [gallery]);
-
   const getToolFromGesture = (landmarks: any, handedness: string): HandAction => {
     if (!settings.gesturesEnabled) return handedness === 'Left' ? handConfig.leftHand : handConfig.rightHand;
     const thumbTip = landmarks[4];
@@ -204,9 +178,11 @@ const GeminiPainter: React.FC = () => {
       const t = landmarks[i];
       return Math.sqrt(Math.pow(t.x - palmBase.x, 2) + Math.pow(t.y - palmBase.y, 2));
     });
+    // Closed hand = erase
     if (dists.every(d => d < FIST_THRESHOLD)) return 'erase';
+    // Pinch = based on setting
     const pinchDist = Math.sqrt(Math.pow(indexTip.x - thumbTip.x, 2) + Math.pow(indexTip.y - thumbTip.y, 2));
-    if (pinchDist < PINCH_THRESHOLD) return 'draw';
+    if (pinchDist < PINCH_THRESHOLD) return handedness === 'Left' ? handConfig.leftHand : handConfig.rightHand;
     return 'none';
   };
 
@@ -219,7 +195,7 @@ const GeminiPainter: React.FC = () => {
   ], [isRecording, settings.zoomLevel, clearCanvas, createNewBoard, takeSnapshot]);
 
   const getHUDCoords = useCallback((width: number, height: number, index: number, total: number) => {
-    const spacing = 90;
+    const spacing = 95;
     const startX = (width - (total * spacing)) / 2;
     switch (settings.hudPosition) {
       case 'bottom': return { x: startX + index * spacing, y: height - 130 };
@@ -243,35 +219,49 @@ const GeminiPainter: React.FC = () => {
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Background and Video
+      // Video BG
       if (settings.isMirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
       ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
       ctx.restore();
 
-      // HUD
+      // Draw Drawing Canvas with Zoom (ONLY the content)
+      ctx.save();
+      ctx.translate(canvas.width/2, canvas.height/2);
+      ctx.scale(settings.zoomLevel, settings.zoomLevel);
+      ctx.translate(-canvas.width/2, -canvas.height/2);
+      ctx.drawImage(dCanvas, 0, 0);
+
+      // Render Text Layers inside zoom
+      textLayers.forEach(tl => {
+        ctx.fillStyle = tl.color; ctx.font = `bold ${tl.size}px Assistant`; ctx.textAlign = 'center';
+        ctx.fillText(tl.text, tl.x, tl.y);
+      });
+      ctx.restore();
+
+      // HUD - NOT ZOOMED
       if (!hideUI) {
         virtualButtons.forEach((btn, i) => {
           const coords = getHUDCoords(canvas.width, canvas.height, i, virtualButtons.length);
           const pressStart = activeButtonsRef.current[btn.id];
           const progress = pressStart ? (Date.now() - pressStart) / VIRTUAL_PRESS_DURATION : 0;
           
-          ctx.fillStyle = settings.lightTheme ? 'rgba(255,255,255,0.9)' : 'rgba(20,20,20,0.9)';
+          ctx.fillStyle = settings.lightTheme ? 'rgba(255,255,255,0.95)' : 'rgba(20,20,20,0.9)';
           ctx.shadowBlur = 15; ctx.shadowColor = 'rgba(0,0,0,0.5)';
-          ctx.beginPath(); ctx.roundRect(coords.x, coords.y, 80, 80, 20); ctx.fill();
+          ctx.beginPath(); ctx.roundRect(coords.x, coords.y, 85, 85, 20); ctx.fill();
           ctx.shadowBlur = 0;
 
           if (progress > 0) {
             ctx.strokeStyle = '#42a5f5'; ctx.lineWidth = 6; ctx.beginPath();
-            ctx.arc(coords.x + 40, coords.y + 40, 34, -Math.PI/2, (-Math.PI/2) + (Math.PI * 2 * Math.min(progress, 1)));
+            ctx.arc(coords.x + 42.5, coords.y + 42.5, 36, -Math.PI/2, (-Math.PI/2) + (Math.PI * 2 * Math.min(progress, 1)));
             ctx.stroke();
           }
           ctx.fillStyle = settings.lightTheme ? '#111' : '#fff';
           ctx.font = 'bold 12px Assistant'; ctx.textAlign = 'center';
-          ctx.fillText(btn.label, coords.x + 40, coords.y + 70);
+          ctx.fillText(btn.label, coords.x + 42.5, coords.y + 75);
         });
       }
 
-      // Hands
+      // Hands Logic
       if (results.multiHandLandmarks) {
         const hands = results.multiHandLandmarks.slice(0, settings.maxHands);
         hands.forEach((landmarks: any, idx: number) => {
@@ -291,35 +281,34 @@ const GeminiPainter: React.FC = () => {
             ctx.restore();
           }
 
-          // Button detection
+          // Button detection (unzoomed coords)
           virtualButtons.forEach((btn, i) => {
             const coords = getHUDCoords(canvas.width, canvas.height, i, virtualButtons.length);
-            const inside = centerX > coords.x && centerX < coords.x + 80 && centerY > coords.y && centerY < coords.y + 80;
+            const inside = centerX > coords.x && centerX < coords.x + 85 && centerY > coords.y && centerY < coords.y + 85;
             if (inside) {
               if (!activeButtonsRef.current[btn.id]) activeButtonsRef.current[btn.id] = Date.now();
               else if (Date.now() - activeButtonsRef.current[btn.id] > VIRTUAL_PRESS_DURATION) {
                 btn.action(); activeButtonsRef.current[btn.id] = Date.now() + 5000;
               }
             } else if (activeButtonsRef.current[btn.id] && Date.now() - activeButtonsRef.current[btn.id] < VIRTUAL_PRESS_DURATION) {
-              // Only clear if not already triggered
               delete activeButtonsRef.current[btn.id];
             }
           });
 
-          // Draw
-          if (!drawingPaused && (tool === 'draw' || tool === 'erase' || (settings.stickyDraw && tool !== 'none'))) {
-            const curTool = settings.stickyDraw ? (handedness === 'Left' ? handConfig.leftHand : handConfig.rightHand) : tool;
-            if (curTool === 'none') return;
-            
+          // Adjusted drawing for zoom
+          const zX = (centerX - canvas.width/2) / settings.zoomLevel + canvas.width/2;
+          const zY = (centerY - canvas.height/2) / settings.zoomLevel + canvas.height/2;
+
+          if (!drawingPaused && (tool === 'draw' || tool === 'erase')) {
             if (!currentStrokes.current[handId]) {
-              currentStrokes.current[handId] = { points: [{x: centerX, y: centerY}], color: curTool === 'erase' ? '#000' : activeColor.current, width: brushSize };
-              lastPoints.current[handId] = {x: centerX, y: centerY};
+              currentStrokes.current[handId] = { points: [{x: zX, y: zY}], color: tool === 'erase' ? '#000' : activeColor.current, width: brushSize };
+              lastPoints.current[handId] = {x: zX, y: zY};
             } else {
-              const p = {x: centerX, y: centerY};
+              const p = {x: zX, y: zY};
               dctx.beginPath(); dctx.moveTo(lastPoints.current[handId]!.x, lastPoints.current[handId]!.y); dctx.lineTo(p.x, p.y);
-              dctx.strokeStyle = curTool === 'erase' ? '#000' : activeColor.current;
-              dctx.globalCompositeOperation = curTool === 'erase' ? 'destination-out' : 'source-over';
-              dctx.lineWidth = brushSize * (curTool === 'erase' ? 2 : 1); dctx.lineCap = 'round'; dctx.stroke();
+              dctx.strokeStyle = tool === 'erase' ? '#000' : activeColor.current;
+              dctx.globalCompositeOperation = tool === 'erase' ? 'destination-out' : 'source-over';
+              dctx.lineWidth = brushSize * (tool === 'erase' ? 2 : 1); dctx.lineCap = 'round'; dctx.stroke();
               lastPoints.current[handId] = p;
             }
           } else { currentStrokes.current[handId] = null; lastPoints.current[handId] = null; }
@@ -330,17 +319,12 @@ const GeminiPainter: React.FC = () => {
         });
       }
 
-      ctx.drawImage(dCanvas, 0, 0);
-      
-      // Render Text Layers
-      textLayers.forEach(tl => {
-        ctx.fillStyle = tl.color; ctx.font = `bold ${tl.size}px Assistant`; ctx.textAlign = 'center';
-        ctx.fillText(tl.text, tl.x, tl.y);
-      });
-
       if (isRecording) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
         ctx.fillStyle = 'white'; ctx.font = 'bold 14px Assistant'; ctx.textAlign = 'right';
-        ctx.fillText("הוקלט ע״י סטודיו אוראל גולד", canvas.width - 20, canvas.height - 20);
+        ctx.fillText("הוקלט ע״י סטודיו אוראל גולד", canvas.width - 20, canvas.height - 15);
+        ctx.restore();
       }
     };
 
@@ -368,10 +352,12 @@ const GeminiPainter: React.FC = () => {
     if (!settings.useMouse) return;
     mouseIsDown.current = true;
     const rect = canvasRef.current!.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / settings.zoomLevel;
-    const y = (e.clientY - rect.top) / settings.zoomLevel;
+    const x = (e.clientX - rect.left - canvasRef.current!.width/2) / settings.zoomLevel + canvasRef.current!.width/2;
+    const y = (e.clientY - rect.top - canvasRef.current!.height/2) / settings.zoomLevel + canvasRef.current!.height/2;
     
-    if (handConfig.rightHand === 'text' || handConfig.leftHand === 'text') {
+    const curAction = e.button === 0 ? handConfig.rightHand : 'erase';
+
+    if (curAction === 'text') {
       setTextLayers(prev => [...prev, { id: Date.now().toString(), text: inputText || "טקסט", x, y, color: activeColor.current, size: brushSize * 3 }]);
     } else {
       lastPoints.current['mouse'] = { x, y };
@@ -381,11 +367,11 @@ const GeminiPainter: React.FC = () => {
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!mouseIsDown.current || !settings.useMouse) return;
     const rect = canvasRef.current!.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / settings.zoomLevel;
-    const y = (e.clientY - rect.top) / settings.zoomLevel;
+    const x = (e.clientX - rect.left - canvasRef.current!.width/2) / settings.zoomLevel + canvasRef.current!.width/2;
+    const y = (e.clientY - rect.top - canvasRef.current!.height/2) / settings.zoomLevel + canvasRef.current!.height/2;
     const dctx = drawingCanvasRef.current!.getContext('2d')!;
-    const isErase = e.buttons === 2;
     
+    const isErase = e.buttons === 2;
     dctx.beginPath(); dctx.moveTo(lastPoints.current['mouse']!.x, lastPoints.current['mouse']!.y); dctx.lineTo(x, y);
     dctx.strokeStyle = isErase ? '#000' : activeColor.current;
     dctx.globalCompositeOperation = isErase ? 'destination-out' : 'source-over';
@@ -405,70 +391,76 @@ const GeminiPainter: React.FC = () => {
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
               <div className="space-y-4">
-                <div className="flex justify-between items-center text-xs font-bold opacity-50"><label>גודל מכחול / טקסט</label><span>{brushSize}px</span></div>
+                <div className="flex justify-between items-center text-xs font-bold opacity-50"><label>גודל מכחול (1-500px)</label><span>{brushSize}px</span></div>
                 <input type="range" min="1" max="500" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-full h-1.5 bg-blue-500/20 rounded-lg appearance-none cursor-pointer accent-blue-500" />
               </div>
 
               <div className="space-y-4">
                 <label className="text-xs font-bold opacity-50">לוח צבעים</label>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-6 gap-2">
                   {(Object.keys(COLORS) as PaintColor[]).map(c => (
                     <button key={c} onClick={() => { activeColor.current = COLORS[c]; setSelectedColor(c); }} className={`w-full aspect-square rounded-lg border-2 transition-all ${selectedColor === c ? 'border-blue-500 scale-110' : 'border-transparent opacity-60'}`} style={{ backgroundColor: COLORS[c] }} />
                   ))}
                 </div>
               </div>
 
+              <div className="space-y-4 pt-4 border-t border-white/5 text-xs">
+                <div className="flex flex-col gap-4">
+                  <div className="flex justify-between items-center"><span>יד ימין (Pinch):</span><select value={handConfig.rightHand} onChange={e => setHandConfig(p => ({...p, rightHand: e.target.value as HandAction}))} className="bg-white/5 p-1 rounded"><option value="draw">ציור</option><option value="erase">מחק</option><option value="text">טקסט</option><option value="none">ללא</option></select></div>
+                  <div className="flex justify-between items-center"><span>יד שמאל (Pinch):</span><select value={handConfig.leftHand} onChange={e => setHandConfig(p => ({...p, leftHand: e.target.value as HandAction}))} className="bg-white/5 p-1 rounded"><option value="draw">ציור</option><option value="erase">מחק</option><option value="text">טקסט</option><option value="none">ללא</option></select></div>
+                </div>
+              </div>
+
+              <div className="pt-4 space-y-4 border-t border-white/5 text-xs">
+                <div className="flex items-center justify-between"><span>לחצני מגע</span><button onClick={() => setSettings(s => ({...s, useStylus: !s.useStylus}))} className={`w-8 h-4 rounded-full relative transition-colors ${settings.useStylus ? 'bg-blue-500' : 'bg-gray-600'}`}><div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${settings.useStylus ? 'right-4' : 'right-0.5'}`} /></button></div>
+                <div className="flex items-center justify-between"><span>לחצני עכבר</span><button onClick={() => setSettings(s => ({...s, useMouse: !s.useMouse}))} className={`w-8 h-4 rounded-full relative transition-colors ${settings.useMouse ? 'bg-blue-500' : 'bg-gray-600'}`}><div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${settings.useMouse ? 'right-4' : 'right-0.5'}`} /></button></div>
+                <div className="flex items-center justify-between"><span>הצג נקודות ידיים</span><button onClick={() => setSettings(s => ({...s, showLandmarks: !s.showLandmarks}))} className={`w-8 h-4 rounded-full relative transition-colors ${settings.showLandmarks ? 'bg-blue-500' : 'bg-gray-600'}`}><div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${settings.showLandmarks ? 'right-4' : 'right-0.5'}`} /></button></div>
+                <div className="flex items-center justify-between"><span>מיקום HUD</span><select value={settings.hudPosition} onChange={e => setSettings(s => ({...s, hudPosition: e.target.value as HUDPosition}))} className="bg-white/5 p-1 rounded"><option value="top">למעלה</option><option value="bottom">למטה</option><option value="left">שמאל</option><option value="right">ימין</option></select></div>
+              </div>
+
               <div className="space-y-4">
-                <div className="flex items-center justify-between text-xs font-bold opacity-50"><span>גלריית לוחות</span><button onClick={multiCheese} className="text-blue-400 flex items-center gap-1 hover:underline"><RefreshCw size={12}/> "צ'יז" לכולם</button></div>
+                <div className="flex items-center gap-2 text-xs font-bold opacity-50"><Layers size={14}/> גלריית לוחות</div>
                 <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto p-1 border border-white/5 rounded-xl">
                   {gallery.map((board) => (
                     <div key={board.id} className="aspect-video bg-black/40 rounded-lg border border-white/10 relative overflow-hidden group">
                       <img src={board.dataUrl} className="w-full h-full object-contain" alt="saved" />
                       <div className="absolute inset-0 bg-blue-500/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity gap-2">
                         <button onClick={() => { const img = new Image(); img.onload = () => drawingCanvasRef.current?.getContext('2d')?.drawImage(img, 0, 0); img.src = board.dataUrl; }} className="p-1 bg-white/20 rounded"><Copy size={14}/></button>
-                        <button onClick={() => { const a = document.createElement('a'); a.href = board.dataUrl; a.download = 'board.png'; a.click(); }} className="p-1 bg-white/20 rounded"><Download size={14}/></button>
+                        <button onClick={() => { const a = document.createElement('a'); a.href = board.dataUrl; a.download = 'orel_board.png'; a.click(); }} className="p-1 bg-white/20 rounded"><Download size={14}/></button>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-
-              <div className="space-y-4 pt-4 border-t border-white/5 text-xs">
-                <div className="flex flex-col gap-4">
-                  <div className="flex justify-between items-center"><span>יד ימין:</span><select value={handConfig.rightHand} onChange={e => setHandConfig(p => ({...p, rightHand: e.target.value as HandAction}))} className="bg-white/5 p-1 rounded"><option value="draw">ציור</option><option value="erase">מחק</option><option value="text">טקסט</option><option value="none">ללא</option></select></div>
-                  <div className="flex justify-between items-center"><span>יד שמאל:</span><select value={handConfig.leftHand} onChange={e => setHandConfig(p => ({...p, leftHand: e.target.value as HandAction}))} className="bg-white/5 p-1 rounded"><option value="draw">ציור</option><option value="erase">מחק</option><option value="text">טקסט</option><option value="none">ללא</option></select></div>
-                </div>
-              </div>
-
-              <div className="pt-4 space-y-4 border-t border-white/5 text-xs">
-                <div className="flex items-center justify-between"><span>עט / מגע</span><button onClick={() => setSettings(s => ({...s, useStylus: !s.useStylus}))} className={`w-8 h-4 rounded-full relative transition-colors ${settings.useStylus ? 'bg-blue-500' : 'bg-gray-600'}`}><div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${settings.useStylus ? 'right-4' : 'right-0.5'}`} /></button></div>
-                <div className="flex items-center justify-between"><span>עכבר</span><button onClick={() => setSettings(s => ({...s, useMouse: !s.useMouse}))} className={`w-8 h-4 rounded-full relative transition-colors ${settings.useMouse ? 'bg-blue-500' : 'bg-gray-600'}`}><div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${settings.useMouse ? 'right-4' : 'right-0.5'}`} /></button></div>
-                <div className="flex items-center justify-between"><span>נקודות ידיים</span><button onClick={() => setSettings(s => ({...s, showLandmarks: !s.showLandmarks}))} className={`w-8 h-4 rounded-full relative transition-colors ${settings.showLandmarks ? 'bg-blue-500' : 'bg-gray-600'}`}><div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${settings.showLandmarks ? 'right-4' : 'right-0.5'}`} /></button></div>
-                <div className="flex items-center justify-between"><span>מחוות חכמות</span><button onClick={() => setSettings(s => ({...s, gesturesEnabled: !s.gesturesEnabled}))} className={`w-8 h-4 rounded-full relative transition-colors ${settings.gesturesEnabled ? 'bg-blue-500' : 'bg-gray-600'}`}><div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${settings.gesturesEnabled ? 'right-4' : 'right-0.5'}`} /></button></div>
-                <div className="flex items-center justify-between"><span>מיקום HUD</span><select value={settings.hudPosition} onChange={e => setSettings(s => ({...s, hudPosition: e.target.value as HUDPosition}))} className="bg-white/5 p-1 rounded"><option value="top">למעלה</option><option value="bottom">למטה</option><option value="left">שמאל</option><option value="right">ימין</option></select></div>
-              </div>
             </div>
-            <div className="p-6 bg-black/10 border-t border-white/5"><button onClick={startCountdown} className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-blue-500/20"><Timer size={20}/> ספירה לאחור (3s)</button></div>
+            <div className="p-6 bg-black/10 border-t border-white/5">
+              <button onClick={startCountdown} className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-bold flex items-center justify-center gap-3">
+                <Timer size={20}/> ספירה לאחור
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Workspace */}
         <div ref={containerRef} className="flex-1 relative h-full bg-black" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={() => mouseIsDown.current = false} onContextMenu={e => e.preventDefault()}>
-          <div style={{ transform: `scale(${settings.zoomLevel})`, transformOrigin: 'center center', transition: 'transform 0.4s cubic-bezier(0.1, 0.7, 0.1, 1)' }} className="w-full h-full">
-            <video ref={videoRef} className="absolute hidden" />
-            <canvas ref={canvasRef} className="absolute inset-0 z-10" />
-            <canvas ref={drawingCanvasRef} className="hidden" />
-          </div>
+          <video ref={videoRef} className="absolute hidden" />
+          <canvas ref={canvasRef} className="absolute inset-0 z-10" />
+          <canvas ref={drawingCanvasRef} className="hidden" />
 
           {!sidebarOpen && !hideUI && (
-            <button onClick={() => setSidebarOpen(true)} className="absolute top-6 right-6 z-50 p-3 bg-[#1e1e1e] rounded-full shadow-2xl border border-white/10"><ChevronLeft/></button>
+            <button onClick={() => setSidebarOpen(true)} className="absolute top-6 right-6 z-50 p-3 bg-[#1e1e1e] rounded-full shadow-2xl border border-white/10 hover:scale-110 transition-transform"><ChevronLeft/></button>
           )}
           {sidebarOpen && (
             <button onClick={() => setSidebarOpen(false)} className="absolute top-1/2 -translate-y-1/2 left-[325px] z-50 p-2 bg-[#1e1e1e] rounded-full shadow-xl border border-white/10"><ChevronRight/></button>
           )}
 
           {loading && (
-            <div className="absolute inset-0 flex items-center justify-center z-50 bg-[#0a0a0a]"><div className="text-center space-y-4"><Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto" /><p className="text-sm font-bold opacity-50 tracking-widest">טוען סטודיו אוראל גולד...</p></div></div>
+            <div className="absolute inset-0 flex items-center justify-center z-50 bg-[#0a0a0a]">
+              <div className="text-center space-y-4">
+                <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto" />
+                <p className="text-sm font-bold opacity-50 tracking-widest">טוען סטודיו אוראל גולד...</p>
+              </div>
+            </div>
           )}
 
           {countdown !== null && (
@@ -476,20 +468,25 @@ const GeminiPainter: React.FC = () => {
           )}
 
           {showKeyboard && (
-            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 bg-[#1e1e1e]/90 p-4 rounded-2xl border border-white/10 shadow-2xl flex gap-3"><input autoFocus type="text" value={inputText} onChange={e => setInputText(e.target.value)} placeholder="הקלד כאן..." className="bg-black/50 p-2 rounded-lg outline-none border border-white/5 focus:border-blue-500 min-w-[200px]" /><button onClick={() => setShowKeyboard(false)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg"><X size={16}/></button></div>
+            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 bg-[#1e1e1e]/95 p-4 rounded-2xl border border-white/10 shadow-2xl flex gap-3 animate-in slide-in-from-bottom">
+              <input autoFocus type="text" value={inputText} onChange={e => setInputText(e.target.value)} placeholder="הקלד כאן..." className="bg-black/50 p-2 rounded-lg outline-none border border-white/5 focus:border-blue-500 min-w-[200px]" />
+              <button onClick={() => setShowKeyboard(false)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg"><X size={16}/></button>
+            </div>
           )}
 
           {capturedImage && (
-            <div className="absolute inset-0 z-[100] bg-black/80 flex items-center justify-center p-8 backdrop-blur-xl animate-in zoom-in duration-300">
-              <div className="max-w-4xl w-full bg-[#1e1e1e] rounded-[40px] overflow-hidden border border-white/10 shadow-2xl flex flex-col md:flex-row">
-                <div className="flex-1 bg-black/40 p-4"><img src={capturedImage} className="w-full h-full object-contain rounded-2xl" alt="Captured Art" /></div>
+            <div className="absolute inset-0 z-[100] bg-black/85 flex items-center justify-center p-8 backdrop-blur-xl animate-in zoom-in duration-300">
+              <div className="max-w-5xl w-full bg-[#1e1e1e] rounded-[40px] overflow-hidden border border-white/10 shadow-2xl flex flex-col md:flex-row">
+                <div className="flex-1 bg-black/40 p-4 relative">
+                  <img src={capturedImage} className="w-full h-full object-contain rounded-2xl" alt="Captured Art" />
+                </div>
                 <div className="w-full md:w-[320px] p-8 flex flex-col gap-6 bg-[#202020]">
                   <div className="flex justify-between items-center"><h3 className="text-2xl font-bold text-blue-400">היצירה מוכנה!</h3><button onClick={() => setCapturedImage(null)}><X/></button></div>
                   <div className="space-y-3">
-                    <button onClick={shareWork} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-3 px-4 transition-all"><Share2 size={18} className="text-blue-400" /> שיתוף</button>
-                    <button onClick={() => { const a = document.createElement('a'); a.href = capturedImage; a.download = prompt("שם תיקייה/קובץ:", "orel_gold_art") + ".png"; a.click(); }} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-3 px-4 transition-all"><Download size={18} className="text-green-400" /> הורדה</button>
-                    {capturedVideo && <a href={capturedVideo} download="time_lapse.webm" className="w-full py-3 bg-blue-500 text-white rounded-xl flex items-center gap-3 px-4 transition-all font-bold"><Film size={18} /> הורד וידאו הילוך מהיר</a>}
-                    <button onClick={() => setCapturedImage(null)} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl font-bold mt-4">חזרה לציור</button>
+                    <button onClick={() => { const a = document.createElement('a'); a.href = capturedImage; a.download = prompt("בחר שם קובץ:", "orel_gold_art") + ".png"; a.click(); }} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-3 px-4 transition-all"><Download size={18} className="text-green-400" /> שמור תמונה</button>
+                    {capturedVideo && <a href={capturedVideo} download="orel_timelapse.webm" className="w-full py-3 bg-blue-600 text-white rounded-xl flex items-center gap-3 px-4 transition-all font-bold"><Film size={18} /> הורד וידאו סטודיו</a>}
+                    <button onClick={shareWork} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-3 px-4 transition-all"><Share2 size={18} className="text-blue-400" /> שיתוף מהיר</button>
+                    <button onClick={() => setCapturedImage(null)} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl font-bold mt-4">חזרה לסטודיו</button>
                   </div>
                 </div>
               </div>

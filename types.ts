@@ -10,7 +10,7 @@ export interface Point {
   z?: number;
 }
 
-export type PaintColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'orange' | 'white' | 'cyan' | 'magenta' | 'lime' | 'pink' | 'teal' | 'gold' | 'silver' | 'brown';
+export type PaintColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'orange' | 'white' | 'cyan' | 'magenta' | 'lime' | 'pink' | 'teal' | 'gold' | 'silver' | 'brown' | 'indigo' | 'rose';
 
 export interface Stroke {
   points: Point[];
@@ -58,7 +58,7 @@ export interface DrawingBoard {
   name?: string;
 }
 
-// Adding missing types for Slingshot game and Gemini analysis service
+// Slingshot / Game Types
 export type BubbleColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'orange';
 
 export interface Bubble {
