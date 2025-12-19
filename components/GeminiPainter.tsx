@@ -10,12 +10,12 @@ import {
   Loader2, Palette, Eraser, Download, Eye, Settings, Trash2, Maximize, Hand as HandIcon,
   Type, Timer, Sun, Moon, Image as ImageIcon, CheckCircle2, Camera,
   X, Printer, Share2, MessageCircle, ChevronRight, ChevronLeft, Keyboard,
-  Plus, Layers, Box, Zap, MousePointer, ZoomIn, ZoomOut, Video, Film, Save, RefreshCw, Copy, Scan
+  Plus, Layers, Box, Zap, MousePointer, ZoomIn, ZoomOut, Video, Film, Save, RefreshCw, Copy, Scan, ShieldCheck, FileText
 } from 'lucide-react';
 
 const PINCH_THRESHOLD = 0.035; 
 const FIST_THRESHOLD = 0.08; 
-const VIRTUAL_PRESS_DURATION = 3000; // 3 seconds per request
+const VIRTUAL_PRESS_DURATION = 2500; // 2.5 seconds per request for better response
 
 const COLORS: Record<PaintColor, string> = {
   red: '#ef5350',
@@ -90,6 +90,7 @@ const GeminiPainter: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [capturedVideo, setCapturedVideo] = useState<string | null>(null);
   const [showKeyboard, setShowKeyboard] = useState(false);
+  const [showAuthCenter, setShowAuthCenter] = useState(false);
 
   const clearCanvas = useCallback(() => {
     const dctx = drawingCanvasRef.current?.getContext('2d');
@@ -125,7 +126,6 @@ const GeminiPainter: React.FC = () => {
   const stopRecording = () => {
     recorderRef.current?.stop();
     setIsRecording(false);
-    // Auto-open Cheese with video
     setCapturedImage(drawingCanvasRef.current?.toDataURL() || null);
   };
 
@@ -135,7 +135,6 @@ const GeminiPainter: React.FC = () => {
     saveToGallery();
   }, [saveToGallery]);
 
-  // Added shareWork function to fix "Cannot find name 'shareWork'" error
   const shareWork = useCallback(async () => {
     if (!capturedImage) return;
     try {
@@ -147,12 +146,8 @@ const GeminiPainter: React.FC = () => {
           title: 'היצירה שלי - סטודיו אוראל גולד',
           files: [file],
         });
-      } else {
-        alert("שיתוף לא נתמך בדפדפן זה. ניתן להוריד את התמונה.");
       }
-    } catch (err) {
-      console.error("Error sharing:", err);
-    }
+    } catch (err) { console.error(err); }
   }, [capturedImage]);
 
   const startCountdown = () => {
@@ -178,9 +173,7 @@ const GeminiPainter: React.FC = () => {
       const t = landmarks[i];
       return Math.sqrt(Math.pow(t.x - palmBase.x, 2) + Math.pow(t.y - palmBase.y, 2));
     });
-    // Closed hand = erase
     if (dists.every(d => d < FIST_THRESHOLD)) return 'erase';
-    // Pinch = based on setting
     const pinchDist = Math.sqrt(Math.pow(indexTip.x - thumbTip.x, 2) + Math.pow(indexTip.y - thumbTip.y, 2));
     if (pinchDist < PINCH_THRESHOLD) return handedness === 'Left' ? handConfig.leftHand : handConfig.rightHand;
     return 'none';
@@ -195,12 +188,12 @@ const GeminiPainter: React.FC = () => {
   ], [isRecording, settings.zoomLevel, clearCanvas, createNewBoard, takeSnapshot]);
 
   const getHUDCoords = useCallback((width: number, height: number, index: number, total: number) => {
-    const spacing = 95;
+    const spacing = 100;
     const startX = (width - (total * spacing)) / 2;
     switch (settings.hudPosition) {
-      case 'bottom': return { x: startX + index * spacing, y: height - 130 };
+      case 'bottom': return { x: startX + index * spacing, y: height - 140 };
       case 'left': return { x: 40, y: (height - (total * spacing)) / 2 + index * spacing };
-      case 'right': return { x: width - 130, y: (height - (total * spacing)) / 2 + index * spacing };
+      case 'right': return { x: width - 140, y: (height - (total * spacing)) / 2 + index * spacing };
       default: return { x: startX + index * spacing, y: 40 };
     }
   }, [settings.hudPosition]);
@@ -219,49 +212,50 @@ const GeminiPainter: React.FC = () => {
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Video BG
+      // Video BG (Mirrored if needed)
       if (settings.isMirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
       ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
       ctx.restore();
 
-      // Draw Drawing Canvas with Zoom (ONLY the content)
+      // Draw Main Drawing Canvas WITH ZOOM
       ctx.save();
-      ctx.translate(canvas.width/2, canvas.height/2);
+      // Center zoom
+      ctx.translate(canvas.width / 2, canvas.height / 2);
       ctx.scale(settings.zoomLevel, settings.zoomLevel);
-      ctx.translate(-canvas.width/2, -canvas.height/2);
+      ctx.translate(-canvas.width / 2, -canvas.height / 2);
       ctx.drawImage(dCanvas, 0, 0);
 
-      // Render Text Layers inside zoom
+      // Render Text Layers
       textLayers.forEach(tl => {
         ctx.fillStyle = tl.color; ctx.font = `bold ${tl.size}px Assistant`; ctx.textAlign = 'center';
         ctx.fillText(tl.text, tl.x, tl.y);
       });
       ctx.restore();
 
-      // HUD - NOT ZOOMED
+      // HUD - Drawing OUTSIDE the zoom context to keep it visible
       if (!hideUI) {
         virtualButtons.forEach((btn, i) => {
           const coords = getHUDCoords(canvas.width, canvas.height, i, virtualButtons.length);
           const pressStart = activeButtonsRef.current[btn.id];
           const progress = pressStart ? (Date.now() - pressStart) / VIRTUAL_PRESS_DURATION : 0;
           
-          ctx.fillStyle = settings.lightTheme ? 'rgba(255,255,255,0.95)' : 'rgba(20,20,20,0.9)';
-          ctx.shadowBlur = 15; ctx.shadowColor = 'rgba(0,0,0,0.5)';
-          ctx.beginPath(); ctx.roundRect(coords.x, coords.y, 85, 85, 20); ctx.fill();
+          ctx.fillStyle = settings.lightTheme ? 'rgba(255,255,255,0.95)' : 'rgba(15,15,15,0.95)';
+          ctx.shadowBlur = 20; ctx.shadowColor = 'rgba(0,0,0,0.4)';
+          ctx.beginPath(); ctx.roundRect(coords.x, coords.y, 88, 88, 22); ctx.fill();
           ctx.shadowBlur = 0;
 
           if (progress > 0) {
-            ctx.strokeStyle = '#42a5f5'; ctx.lineWidth = 6; ctx.beginPath();
-            ctx.arc(coords.x + 42.5, coords.y + 42.5, 36, -Math.PI/2, (-Math.PI/2) + (Math.PI * 2 * Math.min(progress, 1)));
+            ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 6; ctx.beginPath();
+            ctx.arc(coords.x + 44, coords.y + 44, 38, -Math.PI/2, (-Math.PI/2) + (Math.PI * 2 * Math.min(progress, 1)));
             ctx.stroke();
           }
           ctx.fillStyle = settings.lightTheme ? '#111' : '#fff';
           ctx.font = 'bold 12px Assistant'; ctx.textAlign = 'center';
-          ctx.fillText(btn.label, coords.x + 42.5, coords.y + 75);
+          ctx.fillText(btn.label, coords.x + 44, coords.y + 78);
         });
       }
 
-      // Hands Logic
+      // Process Hands
       if (results.multiHandLandmarks) {
         const hands = results.multiHandLandmarks.slice(0, settings.maxHands);
         hands.forEach((landmarks: any, idx: number) => {
@@ -277,14 +271,14 @@ const GeminiPainter: React.FC = () => {
             ctx.save();
             if (settings.isMirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
             window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, {color: '#ffffff33', lineWidth: 1});
-            window.drawLandmarks(ctx, landmarks, {color: activeColor.current, radius: 2});
+            window.drawLandmarks(ctx, landmarks, {color: activeColor.current, radius: 2.5});
             ctx.restore();
           }
 
-          // Button detection (unzoomed coords)
+          // HUD Interaction (Static)
           virtualButtons.forEach((btn, i) => {
             const coords = getHUDCoords(canvas.width, canvas.height, i, virtualButtons.length);
-            const inside = centerX > coords.x && centerX < coords.x + 85 && centerY > coords.y && centerY < coords.y + 85;
+            const inside = centerX > coords.x && centerX < coords.x + 88 && centerY > coords.y && centerY < coords.y + 88;
             if (inside) {
               if (!activeButtonsRef.current[btn.id]) activeButtonsRef.current[btn.id] = Date.now();
               else if (Date.now() - activeButtonsRef.current[btn.id] > VIRTUAL_PRESS_DURATION) {
@@ -295,9 +289,9 @@ const GeminiPainter: React.FC = () => {
             }
           });
 
-          // Adjusted drawing for zoom
-          const zX = (centerX - canvas.width/2) / settings.zoomLevel + canvas.width/2;
-          const zY = (centerY - canvas.height/2) / settings.zoomLevel + canvas.height/2;
+          // World-to-Canvas Mapping (Considering Zoom)
+          const zX = (centerX - canvas.width / 2) / settings.zoomLevel + canvas.width / 2;
+          const zY = (centerY - canvas.height / 2) / settings.zoomLevel + canvas.height / 2;
 
           if (!drawingPaused && (tool === 'draw' || tool === 'erase')) {
             if (!currentStrokes.current[handId]) {
@@ -314,14 +308,14 @@ const GeminiPainter: React.FC = () => {
           } else { currentStrokes.current[handId] = null; lastPoints.current[handId] = null; }
 
           ctx.beginPath(); ctx.arc(centerX, centerY, brushSize/2 + 2, 0, Math.PI * 2);
-          ctx.strokeStyle = tool === 'draw' ? activeColor.current : (tool === 'erase' ? '#ff0000' : '#ffffff22');
+          ctx.strokeStyle = tool === 'draw' ? activeColor.current : (tool === 'erase' ? '#ef4444' : '#ffffff22');
           ctx.stroke();
         });
       }
 
       if (isRecording) {
         ctx.save();
-        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
         ctx.fillStyle = 'white'; ctx.font = 'bold 14px Assistant'; ctx.textAlign = 'right';
         ctx.fillText("הוקלט ע״י סטודיו אוראל גולד", canvas.width - 20, canvas.height - 15);
         ctx.restore();
@@ -354,9 +348,7 @@ const GeminiPainter: React.FC = () => {
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = (e.clientX - rect.left - canvasRef.current!.width/2) / settings.zoomLevel + canvasRef.current!.width/2;
     const y = (e.clientY - rect.top - canvasRef.current!.height/2) / settings.zoomLevel + canvasRef.current!.height/2;
-    
     const curAction = e.button === 0 ? handConfig.rightHand : 'erase';
-
     if (curAction === 'text') {
       setTextLayers(prev => [...prev, { id: Date.now().toString(), text: inputText || "טקסט", x, y, color: activeColor.current, size: brushSize * 3 }]);
     } else {
@@ -370,7 +362,6 @@ const GeminiPainter: React.FC = () => {
     const x = (e.clientX - rect.left - canvasRef.current!.width/2) / settings.zoomLevel + canvasRef.current!.width/2;
     const y = (e.clientY - rect.top - canvasRef.current!.height/2) / settings.zoomLevel + canvasRef.current!.height/2;
     const dctx = drawingCanvasRef.current!.getContext('2d')!;
-    
     const isErase = e.buttons === 2;
     dctx.beginPath(); dctx.moveTo(lastPoints.current['mouse']!.x, lastPoints.current['mouse']!.y); dctx.lineTo(x, y);
     dctx.strokeStyle = isErase ? '#000' : activeColor.current;
@@ -380,7 +371,7 @@ const GeminiPainter: React.FC = () => {
   };
 
   return (
-    <div className={`flex flex-col w-full h-screen ${settings.lightTheme ? 'bg-[#f8f8f8]' : 'bg-[#0a0a0a]'} overflow-hidden font-sans ${settings.lightTheme ? 'text-[#111]' : 'text-[#eee]'} dir-rtl`} style={{ direction: 'rtl' }}>
+    <div className={`flex flex-col w-full h-screen ${settings.lightTheme ? 'bg-[#fcfcfc]' : 'bg-[#0a0a0a]'} overflow-hidden font-sans ${settings.lightTheme ? 'text-[#111]' : 'text-[#eee]'} dir-rtl`} style={{ direction: 'rtl' }}>
       <div className="flex flex-1 relative overflow-hidden">
         {/* Sidebar */}
         <div className={`transition-all duration-500 ease-in-out h-full overflow-hidden flex shadow-2xl z-40 ${sidebarOpen ? 'w-[340px]' : 'w-0'} ${settings.lightTheme ? 'bg-white' : 'bg-[#151515]'}`}>
@@ -404,18 +395,30 @@ const GeminiPainter: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-4 pt-4 border-t border-white/5 text-xs">
-                <div className="flex flex-col gap-4">
-                  <div className="flex justify-between items-center"><span>יד ימין (Pinch):</span><select value={handConfig.rightHand} onChange={e => setHandConfig(p => ({...p, rightHand: e.target.value as HandAction}))} className="bg-white/5 p-1 rounded"><option value="draw">ציור</option><option value="erase">מחק</option><option value="text">טקסט</option><option value="none">ללא</option></select></div>
-                  <div className="flex justify-between items-center"><span>יד שמאל (Pinch):</span><select value={handConfig.leftHand} onChange={e => setHandConfig(p => ({...p, leftHand: e.target.value as HandAction}))} className="bg-white/5 p-1 rounded"><option value="draw">ציור</option><option value="erase">מחק</option><option value="text">טקסט</option><option value="none">ללא</option></select></div>
-                </div>
+              <div className="pt-4 space-y-4 border-t border-white/5 text-xs">
+                <button onClick={() => setShowAuthCenter(!showAuthCenter)} className="w-full py-3 bg-white/5 rounded-xl flex items-center justify-center gap-2 hover:bg-white/10 transition-all">
+                    <ShieldCheck size={18} className="text-green-400"/> מרכז אימות גוגל
+                </button>
               </div>
 
-              <div className="pt-4 space-y-4 border-t border-white/5 text-xs">
-                <div className="flex items-center justify-between"><span>לחצני מגע</span><button onClick={() => setSettings(s => ({...s, useStylus: !s.useStylus}))} className={`w-8 h-4 rounded-full relative transition-colors ${settings.useStylus ? 'bg-blue-500' : 'bg-gray-600'}`}><div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${settings.useStylus ? 'right-4' : 'right-0.5'}`} /></button></div>
-                <div className="flex items-center justify-between"><span>לחצני עכבר</span><button onClick={() => setSettings(s => ({...s, useMouse: !s.useMouse}))} className={`w-8 h-4 rounded-full relative transition-colors ${settings.useMouse ? 'bg-blue-500' : 'bg-gray-600'}`}><div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${settings.useMouse ? 'right-4' : 'right-0.5'}`} /></button></div>
-                <div className="flex items-center justify-between"><span>הצג נקודות ידיים</span><button onClick={() => setSettings(s => ({...s, showLandmarks: !s.showLandmarks}))} className={`w-8 h-4 rounded-full relative transition-colors ${settings.showLandmarks ? 'bg-blue-500' : 'bg-gray-600'}`}><div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${settings.showLandmarks ? 'right-4' : 'right-0.5'}`} /></button></div>
-                <div className="flex items-center justify-between"><span>מיקום HUD</span><select value={settings.hudPosition} onChange={e => setSettings(s => ({...s, hudPosition: e.target.value as HUDPosition}))} className="bg-white/5 p-1 rounded"><option value="top">למעלה</option><option value="bottom">למטה</option><option value="left">שמאל</option><option value="right">ימין</option></select></div>
+              {showAuthCenter && (
+                <div className="p-4 bg-black/30 rounded-2xl border border-white/10 text-[10px] space-y-4 animate-in slide-in-from-top duration-300">
+                    <div>
+                        <p className="font-bold text-gray-400 uppercase mb-1">ads.txt Content:</p>
+                        <code className="block bg-black p-2 rounded border border-white/5 break-all">google.com, pub-6383665206874494, DIRECT, f08c47fec0942fa0</code>
+                    </div>
+                    <div>
+                        <p className="font-bold text-gray-400 uppercase mb-1">Site Verification Tag:</p>
+                        <code className="block bg-black p-2 rounded border border-white/5 break-all">&lt;meta name="google-site-verification" content="FFQ-CHn-VIV9Vu5p6VOAZtbBYffyO8ub4AT2IZzj3ws" /&gt;</code>
+                    </div>
+                </div>
+              )}
+
+              <div className="space-y-4 pt-4 border-t border-white/5 text-xs">
+                <div className="flex flex-col gap-4">
+                  <div className="flex justify-between items-center"><span>יד ימין:</span><select value={handConfig.rightHand} onChange={e => setHandConfig(p => ({...p, rightHand: e.target.value as HandAction}))} className="bg-white/5 p-1 rounded"><option value="draw">ציור</option><option value="erase">מחק</option><option value="text">טקסט</option><option value="none">ללא</option></select></div>
+                  <div className="flex justify-between items-center"><span>יד שמאל:</span><select value={handConfig.leftHand} onChange={e => setHandConfig(p => ({...p, leftHand: e.target.value as HandAction}))} className="bg-white/5 p-1 rounded"><option value="draw">ציור</option><option value="erase">מחק</option><option value="text">טקסט</option><option value="none">ללא</option></select></div>
+                </div>
               </div>
 
               <div className="space-y-4">
@@ -434,8 +437,8 @@ const GeminiPainter: React.FC = () => {
               </div>
             </div>
             <div className="p-6 bg-black/10 border-t border-white/5">
-              <button onClick={startCountdown} className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-bold flex items-center justify-center gap-3">
-                <Timer size={20}/> ספירה לאחור
+              <button onClick={startCountdown} className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-blue-500/20">
+                <Timer size={20}/> ספירה לאחור (Cheese)
               </button>
             </div>
           </div>
@@ -451,14 +454,14 @@ const GeminiPainter: React.FC = () => {
             <button onClick={() => setSidebarOpen(true)} className="absolute top-6 right-6 z-50 p-3 bg-[#1e1e1e] rounded-full shadow-2xl border border-white/10 hover:scale-110 transition-transform"><ChevronLeft/></button>
           )}
           {sidebarOpen && (
-            <button onClick={() => setSidebarOpen(false)} className="absolute top-1/2 -translate-y-1/2 left-[325px] z-50 p-2 bg-[#1e1e1e] rounded-full shadow-xl border border-white/10"><ChevronRight/></button>
+            <button onClick={() => setSidebarOpen(false)} className="absolute top-1/2 -translate-y-1/2 left-[325px] z-50 p-2 bg-[#1e1e1e] rounded-full shadow-xl border border-white/10 transition-all"><ChevronRight/></button>
           )}
 
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center z-50 bg-[#0a0a0a]">
               <div className="text-center space-y-4">
                 <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto" />
-                <p className="text-sm font-bold opacity-50 tracking-widest">טוען סטודיו אוראל גולד...</p>
+                <p className="text-sm font-bold opacity-50 tracking-widest uppercase">Initializing Studio Engine...</p>
               </div>
             </div>
           )}
@@ -477,13 +480,11 @@ const GeminiPainter: React.FC = () => {
           {capturedImage && (
             <div className="absolute inset-0 z-[100] bg-black/85 flex items-center justify-center p-8 backdrop-blur-xl animate-in zoom-in duration-300">
               <div className="max-w-5xl w-full bg-[#1e1e1e] rounded-[40px] overflow-hidden border border-white/10 shadow-2xl flex flex-col md:flex-row">
-                <div className="flex-1 bg-black/40 p-4 relative">
-                  <img src={capturedImage} className="w-full h-full object-contain rounded-2xl" alt="Captured Art" />
-                </div>
+                <div className="flex-1 bg-black/40 p-4 relative"><img src={capturedImage} className="w-full h-full object-contain rounded-2xl" alt="Captured Art" /></div>
                 <div className="w-full md:w-[320px] p-8 flex flex-col gap-6 bg-[#202020]">
                   <div className="flex justify-between items-center"><h3 className="text-2xl font-bold text-blue-400">היצירה מוכנה!</h3><button onClick={() => setCapturedImage(null)}><X/></button></div>
                   <div className="space-y-3">
-                    <button onClick={() => { const a = document.createElement('a'); a.href = capturedImage; a.download = prompt("בחר שם קובץ:", "orel_gold_art") + ".png"; a.click(); }} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-3 px-4 transition-all"><Download size={18} className="text-green-400" /> שמור תמונה</button>
+                    <button onClick={() => { const a = document.createElement('a'); a.href = capturedImage; a.download = prompt("בחר שם לקובץ:", "orel_gold_art") + ".png"; a.click(); }} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-3 px-4 transition-all font-bold"><Download size={18} className="text-green-400" /> שמור תמונה</button>
                     {capturedVideo && <a href={capturedVideo} download="orel_timelapse.webm" className="w-full py-3 bg-blue-600 text-white rounded-xl flex items-center gap-3 px-4 transition-all font-bold"><Film size={18} /> הורד וידאו סטודיו</a>}
                     <button onClick={shareWork} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-3 px-4 transition-all"><Share2 size={18} className="text-blue-400" /> שיתוף מהיר</button>
                     <button onClick={() => setCapturedImage(null)} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl font-bold mt-4">חזרה לסטודיו</button>
@@ -503,11 +504,11 @@ const GeminiPainter: React.FC = () => {
             <span className="text-[10px] opacity-60">Orel Gold © 2026</span>
           </div>
           <div className="flex flex-wrap justify-center gap-6 text-[11px]">
-            <a href="https://linktr.ee/orel_7" target="_blank" className="hover:text-blue-400">מרכז קישורים</a>
-            <a href="https://timerstosend.vercel.app/" target="_blank" className="hover:text-blue-400">אתר טיימרים</a>
-            <a href="https://orelgold7.blogspot.com/" target="_blank" className="hover:text-blue-400">הבלוג של אוראל</a>
-            <a href="https://gold3210.wixsite.com/orel" target="_blank" className="hover:text-blue-400">אתר ראשי</a>
-            <a href="https://docs.google.com/forms/d/e/1FAIpQLScf_p-paTd_NyDySZ6lgfDUaGdoMc0nEo_MQ3w2sPtsplXOrw/viewform" target="_blank" className="font-bold text-blue-400">יצירת קשר</a>
+            <a href="https://linktr.ee/orel_7" target="_blank" className="hover:text-blue-400 transition-colors">מרכז קישורים</a>
+            <a href="https://timerstosend.vercel.app/" target="_blank" className="hover:text-blue-400 transition-colors">אתר טיימרים</a>
+            <a href="https://orelgold7.blogspot.com/" target="_blank" className="hover:text-blue-400 transition-colors">הבלוג של אוראל</a>
+            <a href="https://gold3210.wixsite.com/orel" target="_blank" className="hover:text-blue-400 transition-colors">אתר ראשי</a>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLScf_p-paTd_NyDySZ6lgfDUaGdoMc0nEo_MQ3w2sPtsplXOrw/viewform" target="_blank" className="font-bold text-blue-400 transition-colors">יצירת קשר</a>
           </div>
         </div>
       </footer>
