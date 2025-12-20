@@ -124,7 +124,8 @@ export interface VideoRecording {
 /**
  * Interface for the AI Studio key selection utility.
  */
-export interface IAIStudio {
+// Fix: Renamed to AIStudio to match existing global type expectations and fix subsequent declaration error
+export interface AIStudio {
   hasSelectedApiKey(): Promise<boolean>;
   openSelectKey(): Promise<void>;
 }
@@ -136,7 +137,7 @@ declare global {
     drawConnectors: any;
     drawLandmarks: any;
     HAND_CONNECTIONS: any;
-    // Fix: Renamed local AIStudio interface and made window property optional to avoid modifier/type mismatch with global declarations.
-    aistudio?: IAIStudio;
+    // Updated type to AIStudio and removed optionality to align with global declaration requirements
+    aistudio: AIStudio;
   }
 }

@@ -5,27 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Art Studio | Orel Gold</title>
     
-    <!-- Favicon Fix - Early placement to avoid 404 -->
+    <!-- Favicon Fix -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
 
     <!-- Google Site Verification -->
     <meta name="google-site-verification" content="FFQ-CHn-VIV9Vu5p6VOAZtbBYffyO8ub4AT2IZzj3ws" />
 
-    <!-- Meta tags for performance and ad-block friendliness -->
-    <meta name="color-scheme" content="dark light">
-
-    <!-- Google Analytics & AdSense with Error Handling -->
+    <!-- Console Cleanup Script: משתיק אזהרות מעצבנות -->
     <script>
-      window.addEventListener('error', function(e) {
-        if (e.target && (e.target.src || e.target.href)) {
-          if (e.target.src.includes('googlesyndication') || e.target.src.includes('googletagmanager')) {
-            console.warn('Note: Google scripts were blocked by an ad-blocker. This is expected behavior for some users.');
-            e.stopImmediatePropagation();
+      (function() {
+        const originalWarn = console.warn;
+        const originalError = console.error;
+        
+        // השתקת אזהרות ספציפיות של Tailwind וחוסמי פרסומות
+        console.warn = function(...args) {
+          if (args[0] && typeof args[0] === 'string' && (
+            args[0].includes('cdn.tailwindcss.com') || 
+            args[0].includes('Google scripts were blocked')
+          )) {
+            return;
           }
-        }
-      }, true);
+          originalWarn.apply(console, args);
+        };
+
+        // מניעת הדפסת שגיאות חסימה של אדסנס לקונסולה במידת האפשר
+        window.addEventListener('error', function(e) {
+          if (e.target && (e.target.src || e.target.href)) {
+            const src = e.target.src || e.target.href;
+            if (src.includes('googlesyndication') || src.includes('googletagmanager')) {
+              e.stopImmediatePropagation();
+            }
+          }
+        }, true);
+      })();
     </script>
     
+    <!-- Google Tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-H26D0KFJGF"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -33,9 +48,11 @@
       gtag('js', new Date());
       gtag('config', 'G-H26D0KFJGF');
     </script>
+    
+    <!-- Google AdSense -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6383665206874494" crossorigin="anonymous"></script>
 
-    <!-- Tailwind CSS Play CDN -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
