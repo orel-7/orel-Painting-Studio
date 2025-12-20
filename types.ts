@@ -10,7 +10,59 @@ export interface Point {
   z?: number;
 }
 
-export type PaintColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'orange' | 'white' | 'cyan' | 'magenta' | 'lime' | 'pink' | 'teal' | 'gold' | 'silver' | 'brown' | 'indigo' | 'rose';
+export type PaintColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'orange' | 'white' | 'cyan' | 'magenta' | 'lime' | 'pink' | 'teal' | 'gold' | 'silver' | 'brown' | 'indigo' | 'rose' | 'black';
+
+// Added BubbleColor for Slingshot game
+export type BubbleColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'orange';
+
+// Added Bubble interface for grid elements
+export interface Bubble {
+  id: string;
+  row: number;
+  col: number;
+  x: number;
+  y: number;
+  color: BubbleColor;
+  active: boolean;
+}
+
+// Added Particle interface for explosion effects
+export interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  color: string;
+}
+
+// Added DebugInfo for AI analysis tracking
+export interface DebugInfo {
+  latency: number;
+  screenshotBase64: string;
+  promptContext: string;
+  rawResponse: string;
+  timestamp: string;
+  parsedResponse?: any;
+  error?: string;
+}
+
+// Added TargetCandidate for strategic planning
+export interface TargetCandidate {
+  id: string;
+  color: BubbleColor;
+  size: number;
+  row: number;
+  col: number;
+  pointsPerBubble: number;
+  description: string;
+}
+
+// Added AiResponse for consistent service returns
+export interface AiResponse {
+  hint: any;
+  debug: DebugInfo;
+}
 
 export interface Stroke {
   points: Point[];
@@ -38,6 +90,8 @@ export interface HandConfig {
 export interface CanvasSettings {
   useStylus: boolean;
   useMouse: boolean;
+  showMouseButtons: boolean;
+  showTouchButtons: boolean;
   lightTheme: boolean;
   isMirrored: boolean;
   is3DEnabled: boolean;
@@ -58,60 +112,21 @@ export interface DrawingBoard {
   name?: string;
 }
 
-// Slingshot / Game Types
-export type BubbleColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'orange';
-
-export interface Bubble {
+export interface VideoRecording {
   id: string;
-  row: number;
-  col: number;
-  x: number;
-  y: number;
-  color: BubbleColor;
-  active: boolean;
+  url: string;
+  thumbnail: string;
+  timestamp: number;
+  duration: number;
+  speedMultiplier: number;
 }
 
-export interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  color: string;
-}
-
-export interface DebugInfo {
-  latency: number;
-  screenshotBase64: string;
-  promptContext: string;
-  rawResponse: string;
-  timestamp: string;
-  parsedResponse?: any;
-  error?: string;
-}
-
-export interface TargetCandidate {
-  id: string;
-  color: BubbleColor;
-  size: number;
-  row: number;
-  col: number;
-  pointsPerBubble: number;
-  description: string;
-}
-
-export interface AiResponse {
-  hint: {
-    message: string;
-    suggestion?: string;
-    detectedSubject?: string;
-    artStyle?: string;
-    rationale?: string;
-    targetRow?: number;
-    targetCol?: number;
-    recommendedColor?: BubbleColor;
-  };
-  debug: DebugInfo;
+/**
+ * Interface for the AI Studio key selection utility.
+ */
+export interface AIStudio {
+  hasSelectedApiKey: () => Promise<boolean>;
+  openSelectKey: () => Promise<void>;
 }
 
 declare global {
@@ -121,5 +136,7 @@ declare global {
     drawConnectors: any;
     drawLandmarks: any;
     HAND_CONNECTIONS: any;
+    // Fix: Use the named AIStudio interface to resolve type conflicts and match environmental modifiers.
+    aistudio: AIStudio;
   }
 }
