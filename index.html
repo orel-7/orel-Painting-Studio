@@ -5,13 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Art Studio | Orel Gold</title>
     
-    <!-- Favicon Fix (404 prevention) -->
+    <!-- Favicon Fix - Early placement to avoid 404 -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
 
     <!-- Google Site Verification -->
     <meta name="google-site-verification" content="FFQ-CHn-VIV9Vu5p6VOAZtbBYffyO8ub4AT2IZzj3ws" />
 
-    <!-- Google Tag (gtag.js) - Script is placed before other logic -->
+    <!-- Meta tags for performance and ad-block friendliness -->
+    <meta name="color-scheme" content="dark light">
+
+    <!-- Google Analytics & AdSense with Error Handling -->
+    <script>
+      window.addEventListener('error', function(e) {
+        if (e.target && (e.target.src || e.target.href)) {
+          if (e.target.src.includes('googlesyndication') || e.target.src.includes('googletagmanager')) {
+            console.warn('Note: Google scripts were blocked by an ad-blocker. This is expected behavior for some users.');
+            e.stopImmediatePropagation();
+          }
+        }
+      }, true);
+    </script>
+    
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-H26D0KFJGF"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -19,12 +33,24 @@
       gtag('js', new Date());
       gtag('config', 'G-H26D0KFJGF');
     </script>
-
-    <!-- Google AdSense -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6383665206874494" crossorigin="anonymous"></script>
 
-    <!-- Tailwind CSS (Note: The warning in console is standard for Play CDN and cannot be removed without build process) -->
+    <!-- Tailwind CSS Play CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              assistant: ['Assistant', 'sans-serif'],
+            },
+            animation: {
+              'marquee': 'marquee 25s linear infinite',
+            }
+          }
+        }
+      }
+    </script>
     
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap" rel="stylesheet">
     
@@ -51,6 +77,7 @@
       * {
         user-select: none;
         -webkit-user-drag: none;
+        -webkit-tap-highlight-color: transparent;
       }
       ::-webkit-scrollbar {
         width: 4px;
@@ -68,10 +95,6 @@
       @keyframes marquee {
         0% { transform: translateX(0); }
         100% { transform: translateX(-50%); }
-      }
-      .animate-marquee {
-        display: inline-flex;
-        animation: marquee 20s linear infinite;
       }
     </style>
     

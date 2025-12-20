@@ -406,8 +406,13 @@ const GeminiPainter: React.FC = () => {
         <div className={`transition-all duration-500 ease-in-out h-full overflow-hidden flex shadow-2xl z-40 ${sidebarOpen ? 'w-[360px]' : 'w-0'} ${settings.lightTheme ? 'bg-white' : 'bg-[#151515]'}`}>
           <div className="w-[360px] flex flex-col h-full border-l border-white/5">
             <div className="p-6 border-b border-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-2"><Settings className="w-5 h-5 text-blue-400" /><h2 className="text-lg font-bold">הגדרות סטודיו</h2></div>
-              <button onClick={() => setShowKeyboard(!showKeyboard)} className="p-2 hover:bg-white/5 rounded-lg"><Keyboard size={20}/></button>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+                    <Palette className="w-5 h-5 text-white" />
+                </div>
+                <h2 className="text-xl font-bold tracking-tight">Orel Studio</h2>
+              </div>
+              <button onClick={() => setShowKeyboard(!showKeyboard)} className="p-2 hover:bg-white/5 rounded-lg transition-colors"><Keyboard size={20}/></button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="space-y-4">
@@ -445,7 +450,7 @@ const GeminiPainter: React.FC = () => {
                   ))}
                 </div>
                 {gallery.length >= 3 && (
-                   <button onClick={startCheatMode} className="w-full py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 animate-pulse"><Zap size={16}/> מצב צ׳יט (כל הלוחות)</button>
+                   <button onClick={startCheatMode} className="w-full py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 animate-pulse transition-transform active:scale-95"><Zap size={16}/> מצב צ׳יט (כל הלוחות)</button>
                 )}
               </div>
 
@@ -466,7 +471,7 @@ const GeminiPainter: React.FC = () => {
               </div>
             </div>
             <div className="p-6 bg-black/10 border-t border-white/5">
-               <button onClick={takeSnapshot} className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all"><Camera size={20}/> צילום מהיר</button>
+               <button onClick={takeSnapshot} className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-95"><Camera size={20}/> צילום מהיר</button>
             </div>
           </div>
         </div>
@@ -478,28 +483,28 @@ const GeminiPainter: React.FC = () => {
           <canvas ref={drawingCanvasRef} className="hidden" />
 
           {!sidebarOpen && !hideUI && (
-            <button onClick={() => setSidebarOpen(true)} className="absolute top-6 right-6 z-50 p-3 bg-[#1e1e1e] rounded-full shadow-2xl border border-white/10"><ChevronLeft/></button>
+            <button onClick={() => setSidebarOpen(true)} className="absolute top-6 right-6 z-50 p-3 bg-[#1e1e1e] rounded-full shadow-2xl border border-white/10 transition-transform active:scale-90"><ChevronLeft/></button>
           )}
           {sidebarOpen && (
-            <button onClick={() => setSidebarOpen(false)} className="absolute top-1/2 -translate-y-1/2 left-[345px] z-50 p-2 bg-[#1e1e1e] rounded-full shadow-xl border border-white/10"><ChevronRight/></button>
+            <button onClick={() => setSidebarOpen(false)} className="absolute top-1/2 -translate-y-1/2 left-[345px] z-50 p-2 bg-[#1e1e1e] rounded-full shadow-xl border border-white/10 transition-all hover:scale-110"><ChevronRight/></button>
           )}
 
           {loading && !cameraError && (
             <div className="absolute inset-0 flex items-center justify-center z-50 bg-[#0a0a0a]">
               <div className="text-center space-y-4">
                 <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto" />
-                <p className="text-sm font-bold opacity-50 tracking-widest uppercase animate-pulse">Orel Gold Studio Initializing...</p>
+                <p className="text-sm font-bold opacity-50 tracking-widest uppercase animate-pulse assistant-bold">Orel Studio Initializing...</p>
               </div>
             </div>
           )}
 
           {cameraError && (
              <div className="absolute inset-0 flex items-center justify-center z-50 bg-[#0a0a0a]/90 backdrop-blur-sm p-8">
-                <div className="max-w-md w-full bg-[#1e1e1e] p-8 rounded-3xl border border-red-500/20 text-center space-y-6">
+                <div className="max-w-md w-full bg-[#1e1e1e] p-8 rounded-3xl border border-red-500/20 text-center space-y-6 shadow-2xl">
                    <AlertTriangle className="w-16 h-16 text-red-500 mx-auto" />
                    <h2 className="text-2xl font-bold">שגיאת מצלמה</h2>
                    <p className="text-sm opacity-60 leading-relaxed">{cameraError}</p>
-                   <button onClick={() => window.location.reload()} className="w-full py-3 bg-red-500 text-white rounded-xl font-bold">נסה שוב</button>
+                   <button onClick={() => window.location.reload()} className="w-full py-3 bg-red-500 text-white rounded-xl font-bold transition-transform active:scale-95">נסה שוב</button>
                 </div>
              </div>
           )}
@@ -513,7 +518,7 @@ const GeminiPainter: React.FC = () => {
           {showKeyboard && (
             <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 bg-[#1e1e1e]/95 p-4 rounded-2xl border border-white/10 shadow-2xl flex gap-3 animate-in slide-in-from-bottom">
               <input autoFocus type="text" value={inputText} onChange={e => setInputText(e.target.value)} placeholder="הקלד כאן..." className="bg-black/50 p-2 rounded-lg outline-none border border-white/5 focus:border-blue-500 min-w-[200px] text-white" />
-              <button onClick={() => setShowKeyboard(false)} className="p-2 bg-blue-600 text-white rounded-lg"><CheckCircle2 size={16}/></button>
+              <button onClick={() => setShowKeyboard(false)} className="p-2 bg-blue-600 text-white rounded-lg transition-transform active:scale-90"><CheckCircle2 size={16}/></button>
             </div>
           )}
 
@@ -522,7 +527,7 @@ const GeminiPainter: React.FC = () => {
               <div className="max-w-5xl w-full bg-[#1e1e1e] rounded-[40px] overflow-hidden border border-white/10 shadow-2xl flex flex-col md:flex-row">
                 <div className="flex-1 bg-black/40 p-4 relative group"><img src={capturedImage} className="w-full h-full object-contain rounded-2xl" alt="Captured" /></div>
                 <div className="w-full md:w-[320px] p-8 flex flex-col gap-6 bg-[#202020]">
-                  <div className="flex justify-between items-center"><h3 className="text-2xl font-bold text-blue-400">היצירה מוכנה!</h3><button onClick={() => setCapturedImage(null)}><X/></button></div>
+                  <div className="flex justify-between items-center"><h3 className="text-2xl font-bold text-blue-400">היצירה מוכנה!</h3><button onClick={() => setCapturedImage(null)} className="hover:rotate-90 transition-transform"><X/></button></div>
                   <div className="space-y-3">
                     <button onClick={() => { const a = document.createElement('a'); a.href = capturedImage; a.download = prompt("שם קובץ:", "orel_gold_art") + ".png"; a.click(); }} className="w-full py-4 bg-blue-600 text-white rounded-2xl flex items-center gap-3 px-4 font-bold hover:scale-105 transition-transform"><Download size={20} /> שמור תמונה</button>
                     <button onClick={async () => { try { const res = await fetch(capturedImage); const blob = await res.blob(); await navigator.share({ files: [new File([blob], 'art.png', {type:'image/png'})] }); } catch(e){} }} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-3 px-4 transition-all"><Share2 size={18}/> שיתוף</button>
@@ -538,19 +543,19 @@ const GeminiPainter: React.FC = () => {
                <div className="max-w-4xl w-full bg-[#1e1e1e] rounded-[40px] overflow-hidden border border-white/10 shadow-2xl">
                   <div className="relative aspect-video bg-black flex items-center justify-center">
                       <video src={viewingVideo.url} controls autoPlay loop style={{ filter: `blur(0px)` }} className="max-h-full" />
-                      <div className="absolute bottom-4 right-4 text-white font-bold opacity-30 select-none pointer-events-none">Orel Gold Studio</div>
+                      <div className="absolute bottom-4 right-4 text-white font-bold opacity-30 select-none pointer-events-none tracking-widest uppercase text-xs">Orel Studio Art</div>
                       <div className="absolute top-4 left-4 flex flex-col gap-2">
-                         <button onClick={() => setViewingVideo(v => v ? {...v, speedMultiplier: v.speedMultiplier === 1 ? 2 : 1} : null)} className="p-3 bg-blue-600 text-white rounded-full flex items-center gap-2 text-xs font-bold shadow-xl"><FastForward size={14}/> {viewingVideo.speedMultiplier}x</button>
+                         <button onClick={() => setViewingVideo(v => v ? {...v, speedMultiplier: v.speedMultiplier === 1 ? 2 : 1} : null)} className="p-3 bg-blue-600 text-white rounded-full flex items-center gap-2 text-xs font-bold shadow-xl active:scale-90"><FastForward size={14}/> {viewingVideo.speedMultiplier}x</button>
                       </div>
                   </div>
                   <div className="p-8 flex items-center justify-between">
                      <div className="flex flex-col">
                         <h4 className="font-bold text-xl">צפייה בהקלטה</h4>
-                        <p className="text-xs opacity-40">נוצר על ידי סטודיו אוראל גולד</p>
+                        <p className="text-xs opacity-40 assistant-bold uppercase">Produced by Orel Gold Studio</p>
                      </div>
                      <div className="flex gap-4">
-                        <button onClick={() => { const a = document.createElement('a'); a.href = viewingVideo.url; a.download = "orel_recording.webm"; a.click(); }} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center gap-2"><Film size={18}/> הורד וידאו</button>
-                        <button onClick={() => setViewingVideo(null)} className="px-6 py-3 bg-white/5 rounded-xl font-bold">סגור</button>
+                        <button onClick={() => { const a = document.createElement('a'); a.href = viewingVideo.url; a.download = "orel_recording.webm"; a.click(); }} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center gap-2 transition-transform hover:scale-105 active:scale-95"><Film size={18}/> הורד וידאו</button>
+                        <button onClick={() => setViewingVideo(null)} className="px-6 py-3 bg-white/5 rounded-xl font-bold transition-colors hover:bg-white/10">סגור</button>
                      </div>
                   </div>
                   <div className="bg-black/40 py-4 overflow-hidden relative h-12">
@@ -574,24 +579,15 @@ const GeminiPainter: React.FC = () => {
             <span className="opacity-20">|</span>
             <span className="text-[10px] opacity-60">Orel Gold © 2026</span>
           </div>
-          <div className="flex flex-wrap justify-center gap-6 text-[11px]">
+          <div className="flex flex-wrap justify-center gap-6 text-[11px] font-bold">
             <a href="https://linktr.ee/orel_7" target="_blank" className="hover:text-blue-400 transition-colors flex items-center gap-1"><Info size={12}/> מרכז קישורים</a>
             <a href="https://timerstosend.vercel.app/" target="_blank" className="hover:text-blue-400 transition-colors">אתר טיימרים</a>
             <a href="https://orelgold7.blogspot.com/" target="_blank" className="hover:text-blue-400 transition-colors">הבלוג של אוראל</a>
             <a href="https://gold3210.wixsite.com/orel" target="_blank" className="hover:text-blue-400 transition-colors">אתר ראשי</a>
-            <a href="https://docs.google.com/forms/d/e/1FAIpQLScf_p-paTd_NyDySZ6lgfDUaGdoMc0nEo_MQ3w2sPtsplXOrw/viewform" target="_blank" className="font-bold text-blue-400 transition-colors">יצירת קשר</a>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLScf_p-paTd_NyDySZ6lgfDUaGdoMc0nEo_MQ3w2sPtsplXOrw/viewform" target="_blank" className="font-bold text-blue-400 transition-colors uppercase">Contact Us</a>
           </div>
         </div>
       </footer>
-      <style>{`
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-marquee {
-          animation: marquee 20s linear infinite;
-        }
-      `}</style>
     </div>
   );
 };
