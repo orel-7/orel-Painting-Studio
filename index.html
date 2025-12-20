@@ -5,42 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Art Studio | Orel Gold</title>
     
-    <!-- Favicon Fix -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
 
-    <!-- Google Site Verification -->
     <meta name="google-site-verification" content="FFQ-CHn-VIV9Vu5p6VOAZtbBYffyO8ub4AT2IZzj3ws" />
 
-    <!-- Console Cleanup Script: משתיק אזהרות מעצבנות -->
     <script>
+      // השתקה חכמה של אזהרות ושגיאות רשת שנובעות מחוסמי פרסומות (AdBlock)
       (function() {
         const originalWarn = console.warn;
         const originalError = console.error;
         
-        // השתקת אזהרות ספציפיות של Tailwind וחוסמי פרסומות
         console.warn = function(...args) {
-          if (args[0] && typeof args[0] === 'string' && (
+          if (typeof args[0] === 'string' && (
             args[0].includes('cdn.tailwindcss.com') || 
+            args[0].includes('blocked by an ad-blocker') ||
             args[0].includes('Google scripts were blocked')
-          )) {
-            return;
-          }
+          )) return;
           originalWarn.apply(console, args);
         };
 
-        // מניעת הדפסת שגיאות חסימה של אדסנס לקונסולה במידת האפשר
+        // מניעת הופעת שגיאות אדסנס (ERR_BLOCKED_BY_CLIENT) באדום בקונסולה
         window.addEventListener('error', function(e) {
           if (e.target && (e.target.src || e.target.href)) {
-            const src = e.target.src || e.target.href;
-            if (src.includes('googlesyndication') || src.includes('googletagmanager')) {
+            const url = e.target.src || e.target.href;
+            if (url.includes('googlesyndication') || url.includes('googletagmanager') || url.includes('adsbygoogle')) {
               e.stopImmediatePropagation();
+              e.preventDefault();
             }
           }
         }, true);
       })();
     </script>
     
-    <!-- Google Tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-H26D0KFJGF"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -48,22 +44,14 @@
       gtag('js', new Date());
       gtag('config', 'G-H26D0KFJGF');
     </script>
-    
-    <!-- Google AdSense -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6383665206874494" crossorigin="anonymous"></script>
 
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
-            fontFamily: {
-              assistant: ['Assistant', 'sans-serif'],
-            },
-            animation: {
-              'marquee': 'marquee 25s linear infinite',
-            }
+            fontFamily: { assistant: ['Assistant', 'sans-serif'] },
+            animation: { 'marquee': 'marquee 25s linear infinite' }
           }
         }
       }
@@ -71,48 +59,18 @@
     
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap" rel="stylesheet">
     
-    <!-- MediaPipe Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
     <style>
-      body {
-        margin: 0;
-        background-color: #080808;
-        color: #e3e3e3;
-        overflow: hidden;
-        font-family: 'Assistant', sans-serif;
-      }
-      video {
-        display: none;
-      }
-      .dir-rtl {
-        direction: rtl;
-      }
-      * {
-        user-select: none;
-        -webkit-user-drag: none;
-        -webkit-tap-highlight-color: transparent;
-      }
-      ::-webkit-scrollbar {
-        width: 4px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: rgba(255,255,255,0.1);
-        border-radius: 10px;
-      }
-      canvas {
-        touch-action: none;
-      }
-      @keyframes marquee {
-        0% { transform: translateX(0); }
-        100% { transform: translateX(-50%); }
-      }
+      body { margin: 0; background-color: #080808; color: #e3e3e3; overflow: hidden; font-family: 'Assistant', sans-serif; }
+      video { display: none; }
+      * { user-select: none; -webkit-tap-highlight-color: transparent; }
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+      @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
     </style>
     
     <script type="importmap">
@@ -129,5 +87,16 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // טעינה מושהית של אדסנס כדי להבטיח שהאפליקציה נטענת קודם
+      setTimeout(() => {
+        const s = document.createElement('script');
+        s.async = true;
+        s.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6383665206874494";
+        s.crossOrigin = "anonymous";
+        s.onerror = () => {}; // השתקת שגיאות טעינה
+        document.body.appendChild(s);
+      }, 3000);
+    </script>
   </body>
 </html>

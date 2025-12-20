@@ -6,16 +6,11 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Point, Stroke, PaintColor, HandAction, HandConfig, CanvasSettings, DrawingBoard, HUDPosition, TextLayer, VideoRecording } from '../types';
 import { 
-  Loader2, Palette, Eraser, Download, Eye, Settings, Trash2, Maximize, Hand as HandIcon,
-  Type, Timer, Sun, Moon, Image as ImageIcon, CheckCircle2, Camera,
-  X, Printer, Share2, MessageCircle, ChevronRight, ChevronLeft, Keyboard,
-  Plus, Layers, Box, Zap, MousePointer, ZoomIn, ZoomOut, Video, Film, Save, RefreshCw, Copy, Scan, ShieldCheck, Play, FastForward, Info,
-  AlertTriangle
+  Loader2, Palette, Eraser, Download, Settings, Trash2, Camera,
+  X, Share2, ChevronRight, ChevronLeft, Keyboard,
+  Plus, Layers, Zap, ZoomIn, ZoomOut, Video, Film, Copy, Play, FastForward, Info,
+  AlertTriangle, CheckCircle2
 } from 'lucide-react';
-
-const PINCH_THRESHOLD = 0.035; 
-const FIST_THRESHOLD = 0.08; 
-const VIRTUAL_PRESS_DURATION = 2500; 
 
 const COLORS: Record<PaintColor, string> = {
   red: '#ef5350', blue: '#42a5f5', green: '#66bb6a', yellow: '#ffee58',
@@ -34,6 +29,7 @@ const GeminiPainter: React.FC = () => {
   const chunksRef = useRef<Blob[]>([]);
   const handsInstance = useRef<any>(null);
   const cameraInstance = useRef<any>(null);
+  const isMounted = useRef(true);
 
   // Logic Refs
   const currentStrokes = useRef<Record<string, Stroke | null>>({});
@@ -41,7 +37,6 @@ const GeminiPainter: React.FC = () => {
   const activeColor = useRef<string>(COLORS.cyan);
   const activeButtonsRef = useRef<Record<string, number>>({});
   const mouseIsDown = useRef(false);
-  const cameraFocus = useRef<Point>({ x: 0.5, y: 0.5 });
 
   // State
   const [loading, setLoading] = useState(true);
@@ -57,18 +52,13 @@ const GeminiPainter: React.FC = () => {
     zoomLevel: 1, showLandmarks: true, cameraFollow: false
   });
   
-  const [handConfig, setHandConfig] = useState<HandConfig>({ leftHand: 'erase', rightHand: 'draw' });
   const [gallery, setGallery] = useState<DrawingBoard[]>([]);
-  const [videoGallery, setVideoGallery] = useState<VideoRecording[]>([]);
   const [textLayers, setTextLayers] = useState<TextLayer[]>([]);
-  const [drawingPaused, setDrawingPaused] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [inputText, setInputText] = useState("");
   const [brushSize, setBrushSize] = useState(15);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [viewingVideo, setViewingVideo] = useState<VideoRecording | null>(null);
   const [showKeyboard, setShowKeyboard] = useState(false);
-  const [isCheatActive, setIsCheatActive] = useState(false);
 
   const clearCanvas = useCallback(() => {
     const dctx = drawingCanvasRef.current?.getContext('2d');
@@ -79,8 +69,7 @@ const GeminiPainter: React.FC = () => {
   const saveToGallery = useCallback((name?: string) => {
     if (!drawingCanvasRef.current) return;
     const currentData = drawingCanvasRef.current.toDataURL();
-    const id = Date.now().toString();
-    setGallery(prev => [{ id, dataUrl: currentData, timestamp: Date.now(), name }, ...prev]);
+    setGallery(prev => [{ id: Date.now().toString(), dataUrl: currentData, timestamp: Date.now(), name }, ...prev]);
   }, []);
 
   const createNewBoard = useCallback(() => {
@@ -90,22 +79,19 @@ const GeminiPainter: React.FC = () => {
 
   const startRecording = () => {
     if (!canvasRef.current) return;
-    const stream = canvasRef.current.captureStream(30);
-    recorderRef.current = new MediaRecorder(stream, { mimeType: 'video/webm' });
-    chunksRef.current = [];
-    const startTime = Date.now();
-    recorderRef.current.ondataavailable = (e) => chunksRef.current.push(e.data);
-    recorderRef.current.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-      const duration = (Date.now() - startTime) / 1000;
-      const url = URL.createObjectURL(blob);
-      const thumbnail = drawingCanvasRef.current?.toDataURL() || "";
-      const newRec: VideoRecording = { id: Date.now().toString(), url, thumbnail, timestamp: Date.now(), duration, speedMultiplier: 1 };
-      setVideoGallery(prev => [newRec, ...prev]);
-      setViewingVideo(newRec);
-    };
-    recorderRef.current.start();
-    setIsRecording(true);
+    try {
+      const stream = canvasRef.current.captureStream(30);
+      recorderRef.current = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      chunksRef.current = [];
+      recorderRef.current.ondataavailable = (e) => chunksRef.current.push(e.data);
+      recorderRef.current.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = "recording.webm"; a.click();
+      };
+      recorderRef.current.start();
+      setIsRecording(true);
+    } catch (e) { console.error("Recording not supported"); }
   };
 
   const stopRecording = () => {
@@ -119,69 +105,21 @@ const GeminiPainter: React.FC = () => {
     saveToGallery("Snapshot");
   }, [saveToGallery]);
 
-  const startCountdown = () => {
-    let count = 3;
-    setCountdown(count);
-    const interval = setInterval(() => {
-      count -= 1;
-      if (count > 0) setCountdown(count);
-      else {
-        clearInterval(interval);
-        setCountdown(null);
-        takeSnapshot();
-      }
-    }, 1000);
-  };
-
   const startCheatMode = async () => {
     if (gallery.length < 3) return alert("צריך לפחות 3 לוחות כדי להתחיל צ'יט!");
-    setIsCheatActive(true);
-    setHideUI(true);
-    setSidebarOpen(false);
-    clearCanvas();
-
+    setHideUI(true); setSidebarOpen(false); clearCanvas();
     const dctx = drawingCanvasRef.current?.getContext('2d');
     if (!dctx) return;
-
     for (let i = gallery.length - 1; i >= 0; i--) {
-      setCountdown(3);
-      await new Promise(r => setTimeout(r, 1000));
-      setCountdown(2);
-      await new Promise(r => setTimeout(r, 1000));
-      setCountdown(1);
-      await new Promise(r => setTimeout(r, 1000));
+      setCountdown(3); await new Promise(r => setTimeout(r, 1000));
+      setCountdown(2); await new Promise(r => setTimeout(r, 1000));
+      setCountdown(1); await new Promise(r => setTimeout(r, 1000));
       setCountdown(null);
-
-      const img = new Image();
-      img.src = gallery[i].dataUrl;
-      await new Promise(r => {
-        img.onload = () => {
-          dctx.clearRect(0, 0, drawingCanvasRef.current!.width, drawingCanvasRef.current!.height);
-          dctx.drawImage(img, 0, 0);
-          r(null);
-        };
-      });
+      const img = new Image(); img.src = gallery[i].dataUrl;
+      await new Promise(r => { img.onload = () => { dctx.clearRect(0, 0, dctx.canvas.width, dctx.canvas.height); dctx.drawImage(img, 0, 0); r(null); }; });
       await new Promise(r => setTimeout(r, 2000));
     }
-
-    setIsCheatActive(false);
-    setHideUI(false);
-    setSidebarOpen(true);
-  };
-
-  const getToolFromGesture = (landmarks: any, handedness: string): HandAction => {
-    if (!settings.gesturesEnabled) return handedness === 'Left' ? handConfig.leftHand : handConfig.rightHand;
-    const thumbTip = landmarks[4];
-    const indexTip = landmarks[8];
-    const palmBase = landmarks[0];
-    const dists = [8, 12, 16, 20].map(i => {
-      const t = landmarks[i];
-      return Math.sqrt(Math.pow(t.x - palmBase.x, 2) + Math.pow(t.y - palmBase.y, 2));
-    });
-    if (dists.every(d => d < FIST_THRESHOLD)) return 'erase';
-    const pinchDist = Math.sqrt(Math.pow(indexTip.x - thumbTip.x, 2) + Math.pow(indexTip.y - thumbTip.y, 2));
-    if (pinchDist < PINCH_THRESHOLD) return handedness === 'Left' ? handConfig.leftHand : handConfig.rightHand;
-    return 'none';
+    setHideUI(false); setSidebarOpen(true);
   };
 
   const virtualButtons = useMemo(() => [
@@ -195,95 +133,54 @@ const GeminiPainter: React.FC = () => {
   const getHUDCoords = useCallback((width: number, height: number, index: number, total: number) => {
     const spacing = 100;
     const startX = (width - (total * spacing)) / 2;
-    switch (settings.hudPosition) {
-      case 'bottom': return { x: startX + index * spacing, y: height - 140 };
-      case 'left': return { x: 40, y: (height - (total * spacing)) / 2 + index * spacing };
-      case 'right': return { x: width - 140, y: (height - (total * spacing)) / 2 + index * spacing };
-      default: return { x: startX + index * spacing, y: 40 };
-    }
+    return { x: startX + index * spacing, y: settings.hudPosition === 'bottom' ? height - 140 : 40 };
   }, [settings.hudPosition]);
 
   useEffect(() => {
+    isMounted.current = true;
     if (!videoRef.current || !canvasRef.current || !drawingCanvasRef.current || !containerRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const dCanvas = drawingCanvasRef.current;
-    const container = containerRef.current;
     const ctx = canvas.getContext('2d')!;
     const dctx = dCanvas.getContext('2d')!;
 
     const onResults = (results: any) => {
+      if (!isMounted.current) return;
       setLoading(false);
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Camera Follow logic: calculate bounding box of all hands
-      let followX = 0.5;
-      let followY = 0.5;
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0 && settings.cameraFollow) {
-        let minX = 1, maxX = 0, minY = 1, maxY = 0;
-        results.multiHandLandmarks.forEach((hands: any) => {
-          hands.forEach((p: any) => {
-            minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-            minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
-          });
-        });
-        followX = (minX + maxX) / 2;
-        followY = (minY + maxY) / 2;
-        cameraFocus.current = { x: followX, y: followY };
-      } else {
-        cameraFocus.current = { x: 0.5, y: 0.5 };
-      }
-
-      // Background Video with Mirrored and Follow
       if (settings.isMirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
-      
-      const zoom = settings.cameraFollow ? 1.5 : 1;
-      const drawW = canvas.width * zoom;
-      const drawH = canvas.height * zoom;
-      const drawX = (canvas.width / 2) - (followX * drawW);
-      const drawY = (canvas.height / 2) - (followY * drawH);
-      
-      ctx.drawImage(results.image, drawX, drawY, drawW, drawH);
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
       ctx.restore();
 
-      // Main Drawing Layer
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2);
       ctx.scale(settings.zoomLevel, settings.zoomLevel);
       ctx.translate(-canvas.width / 2, -canvas.height / 2);
       ctx.drawImage(dCanvas, 0, 0);
-
       textLayers.forEach(tl => {
         ctx.fillStyle = tl.color; ctx.font = `bold ${tl.size}px Assistant`; ctx.textAlign = 'center';
         ctx.fillText(tl.text, tl.x, tl.y);
       });
       ctx.restore();
 
-      // HUD UI (Static Layer)
       if (!hideUI) {
         virtualButtons.forEach((btn, i) => {
           const coords = getHUDCoords(canvas.width, canvas.height, i, virtualButtons.length);
           const pressStart = activeButtonsRef.current[btn.id];
-          const progress = pressStart ? (Date.now() - pressStart) / VIRTUAL_PRESS_DURATION : 0;
-          
-          ctx.fillStyle = settings.lightTheme ? 'rgba(255,255,255,0.9)' : 'rgba(20,20,20,0.9)';
-          ctx.shadowBlur = 15; ctx.shadowColor = 'rgba(0,0,0,0.4)';
-          ctx.beginPath(); ctx.roundRect(coords.x, coords.y, 88, 88, 22); ctx.fill();
-          ctx.shadowBlur = 0;
-
+          const progress = pressStart ? (Date.now() - pressStart) / 2500 : 0;
+          ctx.fillStyle = 'rgba(20,20,20,0.9)'; ctx.beginPath(); ctx.roundRect(coords.x, coords.y, 88, 88, 22); ctx.fill();
           if (progress > 0) {
             ctx.strokeStyle = '#42a5f5'; ctx.lineWidth = 6; ctx.beginPath();
             ctx.arc(coords.x + 44, coords.y + 44, 38, -Math.PI/2, (-Math.PI/2) + (Math.PI * 2 * Math.min(progress, 1)));
             ctx.stroke();
           }
-          ctx.fillStyle = settings.lightTheme ? '#111' : '#fff';
-          ctx.font = 'bold 12px Assistant'; ctx.textAlign = 'center';
+          ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Assistant'; ctx.textAlign = 'center';
           ctx.fillText(btn.label, coords.x + 44, coords.y + 78);
         });
       }
 
-      // Hands Logic
       if (results.multiHandLandmarks) {
         results.multiHandLandmarks.slice(0, settings.maxHands).forEach((landmarks: any, idx: number) => {
           const handedness = results.multiHandedness[idx].label;
@@ -291,84 +188,80 @@ const GeminiPainter: React.FC = () => {
           const x = settings.isMirrored ? (1 - indexTip.x) : indexTip.x;
           const centerX = x * canvas.width;
           const centerY = indexTip.y * canvas.height;
-          const tool = getToolFromGesture(landmarks, handedness);
           const handId = `hand_${idx}_${handedness}`;
 
-          if (settings.showLandmarks && !hideUI) {
-            ctx.save();
-            if (settings.isMirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
-            window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, {color: '#ffffff33', lineWidth: 1});
-            window.drawLandmarks(ctx, landmarks, {color: activeColor.current, radius: 2.5});
-            ctx.restore();
-          }
-
-          // HUD detect (Static)
-          virtualButtons.forEach((btn, i) => {
-            const coords = getHUDCoords(canvas.width, canvas.height, i, virtualButtons.length);
-            const inside = centerX > coords.x && centerX < coords.x + 88 && centerY > coords.y && centerY < coords.y + 88;
-            if (inside) {
+          virtualButtons.forEach((btn) => {
+            const coords = getHUDCoords(canvas.width, canvas.height, virtualButtons.indexOf(btn), virtualButtons.length);
+            if (centerX > coords.x && centerX < coords.x + 88 && centerY > coords.y && centerY < coords.y + 88) {
               if (!activeButtonsRef.current[btn.id]) activeButtonsRef.current[btn.id] = Date.now();
-              else if (Date.now() - activeButtonsRef.current[btn.id] > VIRTUAL_PRESS_DURATION) {
-                btn.action(); activeButtonsRef.current[btn.id] = Date.now() + 5000;
-              }
-            } else if (activeButtonsRef.current[btn.id] && Date.now() - activeButtonsRef.current[btn.id] < VIRTUAL_PRESS_DURATION) {
-              delete activeButtonsRef.current[btn.id];
-            }
+              else if (Date.now() - activeButtonsRef.current[btn.id] > 2500) { btn.action(); activeButtonsRef.current[btn.id] = Date.now() + 5000; }
+            } else if (activeButtonsRef.current[btn.id] && Date.now() - activeButtonsRef.current[btn.id] < 2500) delete activeButtonsRef.current[btn.id];
           });
 
           const zX = (centerX - canvas.width / 2) / settings.zoomLevel + canvas.width / 2;
           const zY = (centerY - canvas.height / 2) / settings.zoomLevel + canvas.height / 2;
 
-          if (!drawingPaused && (tool === 'draw' || tool === 'erase')) {
+          const thumbTip = landmarks[4];
+          const pinchDist = Math.sqrt(Math.pow(landmarks[8].x - thumbTip.x, 2) + Math.pow(landmarks[8].y - thumbTip.y, 2));
+          const isDrawing = pinchDist < 0.035;
+
+          if (isDrawing) {
             if (!currentStrokes.current[handId]) {
-              currentStrokes.current[handId] = { points: [{x: zX, y: zY}], color: tool === 'erase' ? '#000' : activeColor.current, width: brushSize };
+              currentStrokes.current[handId] = { points: [{x: zX, y: zY}], color: handedness === 'Left' ? '#000' : activeColor.current, width: brushSize };
               lastPoints.current[handId] = {x: zX, y: zY};
             } else {
-              const p = {x: zX, y: zY};
-              dctx.beginPath(); dctx.moveTo(lastPoints.current[handId]!.x, lastPoints.current[handId]!.y); dctx.lineTo(p.x, p.y);
-              dctx.strokeStyle = tool === 'erase' ? '#000' : activeColor.current;
-              dctx.globalCompositeOperation = tool === 'erase' ? 'destination-out' : 'source-over';
-              dctx.lineWidth = brushSize * (tool === 'erase' ? 2 : 1); dctx.lineCap = 'round'; dctx.stroke();
-              lastPoints.current[handId] = p;
+              dctx.beginPath(); dctx.moveTo(lastPoints.current[handId]!.x, lastPoints.current[handId]!.y); dctx.lineTo(zX, zY);
+              dctx.strokeStyle = handedness === 'Left' ? '#000' : activeColor.current;
+              dctx.globalCompositeOperation = handedness === 'Left' ? 'destination-out' : 'source-over';
+              dctx.lineWidth = brushSize; dctx.lineCap = 'round'; dctx.stroke();
+              lastPoints.current[handId] = {x: zX, y: zY};
             }
           } else { currentStrokes.current[handId] = null; lastPoints.current[handId] = null; }
           
           ctx.beginPath(); ctx.arc(centerX, centerY, brushSize/2 + 2, 0, Math.PI * 2);
-          ctx.strokeStyle = tool === 'draw' ? activeColor.current : (tool === 'erase' ? '#ff0000' : '#ffffff22');
-          ctx.stroke();
+          ctx.strokeStyle = isDrawing ? activeColor.current : '#ffffff22'; ctx.stroke();
         });
-      }
-
-      if (isRecording) {
-        ctx.save();
-        ctx.fillStyle = 'white'; ctx.font = 'bold 16px Assistant'; ctx.textAlign = 'right';
-        ctx.fillText("Orel Gold Studio • נוצר ע״י אוראל גולד", canvas.width - 20, canvas.height - 20);
-        ctx.restore();
       }
     };
 
-    if (!handsInstance.current) {
-      handsInstance.current = new window.Hands({ locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-      handsInstance.current.setOptions({ maxNumHands: 4, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
-      handsInstance.current.onResults(onResults);
-    }
+    // ניקוי מופעים ישנים לפני יצירה מחדש
+    if (handsInstance.current) { handsInstance.current.close(); handsInstance.current = null; }
+    if (cameraInstance.current) { cameraInstance.current.stop(); cameraInstance.current = null; }
 
-    if (!cameraInstance.current) {
-      cameraInstance.current = new window.Camera(video, { onFrame: async () => { if (videoRef.current && !videoRef.current.paused) await handsInstance.current.send({ image: videoRef.current }); }, width: 1280, height: 720 });
-      cameraInstance.current.start().catch((err: any) => {
-          console.error("Camera start error:", err);
-          setCameraError("לא ניתן לגשת למצלמה. בדוק הרשאות או חוסמי פרסומות המונעים גישה לרכיבים חיצוניים.");
-      });
-    }
+    handsInstance.current = new window.Hands({ locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    // רמת מורכבות 0 חוסכת משמעותית ב-RAM ו-CPU
+    handsInstance.current.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    handsInstance.current.onResults(onResults);
+
+    cameraInstance.current = new window.Camera(video, { 
+      onFrame: async () => { 
+        if (isMounted.current && videoRef.current && !videoRef.current.paused && handsInstance.current) {
+          await handsInstance.current.send({ image: videoRef.current }); 
+        }
+      }, 
+      width: 640, height: 480 // רזולוציה אופטימלית לחיסכון במשאבים
+    });
+    cameraInstance.current.start().catch((err: any) => {
+      console.error(err);
+      setCameraError("Camera initialization failed. Check permissions.");
+    });
 
     const resize = () => {
-      canvas.width = container.clientWidth; canvas.height = container.clientHeight;
-      dCanvas.width = container.clientWidth; dCanvas.height = container.clientHeight;
+      if (!containerRef.current || !canvas || !dCanvas) return;
+      canvas.width = containerRef.current.clientWidth; canvas.height = containerRef.current.clientHeight;
+      dCanvas.width = canvas.width; dCanvas.height = canvas.height;
     };
     window.addEventListener('resize', resize);
     resize();
-    return () => window.removeEventListener('resize', resize);
-  }, [settings, handConfig, drawingPaused, brushSize, hideUI, isRecording, textLayers, virtualButtons, clearCanvas, createNewBoard, takeSnapshot, getHUDCoords]);
+
+    return () => {
+      isMounted.current = false;
+      window.removeEventListener('resize', resize);
+      if (cameraInstance.current) { cameraInstance.current.stop(); cameraInstance.current = null; }
+      if (handsInstance.current) { handsInstance.current.close(); handsInstance.current = null; }
+      if (video && video.srcObject) { (video.srcObject as MediaStream).getTracks().forEach(t => t.stop()); video.srcObject = null; }
+    };
+  }, [settings, hideUI, isRecording, textLayers, virtualButtons, brushSize, settings.zoomLevel, getHUDCoords, clearCanvas, createNewBoard, takeSnapshot]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!settings.useMouse) return;
@@ -376,13 +269,7 @@ const GeminiPainter: React.FC = () => {
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = (e.clientX - rect.left - canvasRef.current!.width/2) / settings.zoomLevel + canvasRef.current!.width/2;
     const y = (e.clientY - rect.top - canvasRef.current!.height/2) / settings.zoomLevel + canvasRef.current!.height/2;
-    
-    const curAction = e.button === 0 ? handConfig.rightHand : 'erase';
-    if (curAction === 'text') {
-      setTextLayers(prev => [...prev, { id: Date.now().toString(), text: inputText || "טקסט", x, y, color: activeColor.current, size: brushSize * 3 }]);
-    } else {
-      lastPoints.current['mouse'] = { x, y };
-    }
+    lastPoints.current['mouse'] = { x, y };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -395,197 +282,106 @@ const GeminiPainter: React.FC = () => {
     dctx.beginPath(); dctx.moveTo(lastPoints.current['mouse']!.x, lastPoints.current['mouse']!.y); dctx.lineTo(x, y);
     dctx.strokeStyle = isErase ? '#000' : activeColor.current;
     dctx.globalCompositeOperation = isErase ? 'destination-out' : 'source-over';
-    dctx.lineWidth = brushSize * (isErase ? 2 : 1); dctx.lineCap = 'round'; dctx.stroke();
+    dctx.lineWidth = brushSize; dctx.lineCap = 'round'; dctx.stroke();
     lastPoints.current['mouse'] = { x, y };
   };
 
   return (
-    <div className={`flex flex-col w-full h-screen ${settings.lightTheme ? 'bg-[#f8f8f8]' : 'bg-[#0a0a0a]'} overflow-hidden font-sans ${settings.lightTheme ? 'text-[#111]' : 'text-[#eee]'} dir-rtl`} style={{ direction: 'rtl' }}>
+    <div className="flex flex-col w-full h-screen bg-[#0a0a0a] overflow-hidden dir-rtl">
       <div className="flex flex-1 relative overflow-hidden">
-        {/* Sidebar */}
-        <div className={`transition-all duration-500 ease-in-out h-full overflow-hidden flex shadow-2xl z-40 ${sidebarOpen ? 'w-[360px]' : 'w-0'} ${settings.lightTheme ? 'bg-white' : 'bg-[#151515]'}`}>
+        <div className={`transition-all duration-500 h-full overflow-hidden flex shadow-2xl z-40 ${sidebarOpen ? 'w-[360px]' : 'w-0'} bg-[#151515]`}>
           <div className="w-[360px] flex flex-col h-full border-l border-white/5">
             <div className="p-6 border-b border-white/5 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
-                    <Palette className="w-5 h-5 text-white" />
-                </div>
-                <h2 className="text-xl font-bold tracking-tight">Orel Studio</h2>
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><Palette className="w-5 h-5 text-white" /></div>
+                <h2 className="text-xl font-bold">Orel Studio</h2>
               </div>
-              <button onClick={() => setShowKeyboard(!showKeyboard)} className="p-2 hover:bg-white/5 rounded-lg transition-colors"><Keyboard size={20}/></button>
+              <button onClick={() => setShowKeyboard(!showKeyboard)} className="p-2 hover:bg-white/5 rounded-lg"><Keyboard size={20}/></button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="space-y-4">
-                <div className="flex justify-between items-center text-xs font-bold opacity-50"><label>גודל מכחול (1-500px)</label><span>{brushSize}px</span></div>
-                <input type="range" min="1" max="500" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-full h-1.5 bg-blue-500/20 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                <label className="text-xs font-bold opacity-50">גודל מכחול: {brushSize}px</label>
+                <input type="range" min="1" max="500" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-full accent-blue-500" />
               </div>
-
-              <div className="space-y-4">
-                <label className="text-xs font-bold opacity-50">לוח צבעים</label>
-                <div className="grid grid-cols-6 gap-2">
-                  {(Object.keys(COLORS) as PaintColor[]).map(c => (
-                    <button key={c} onClick={() => { activeColor.current = COLORS[c]; setSelectedColor(c); }} className={`w-full aspect-square rounded-lg border-2 transition-all ${selectedColor === c ? 'border-blue-500 scale-110' : 'border-transparent opacity-60'}`} style={{ backgroundColor: COLORS[c] }} />
-                  ))}
-                </div>
+              <div className="grid grid-cols-6 gap-2">
+                {(Object.keys(COLORS) as PaintColor[]).map(c => (
+                  <button key={c} onClick={() => { activeColor.current = COLORS[c]; setSelectedColor(c); }} className={`w-full aspect-square rounded-lg border-2 ${selectedColor === c ? 'border-white scale-110' : 'border-transparent opacity-60'}`} style={{ backgroundColor: COLORS[c] }} />
+                ))}
               </div>
-
-              <div className="space-y-4 border-t border-white/5 pt-4">
-                <div className="flex items-center justify-between text-xs"><span>מצב עכבר (קליק ימין למחיקה)</span><button onClick={() => setSettings(s => ({...s, useMouse: !s.useMouse}))} className={`w-10 h-5 rounded-full relative transition-colors ${settings.useMouse ? 'bg-blue-500' : 'bg-gray-700'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${settings.useMouse ? 'right-6' : 'right-1'}`} /></button></div>
-                <div className="flex items-center justify-between text-xs"><span>מעקב מצלמה (חכם)</span><button onClick={() => setSettings(s => ({...s, cameraFollow: !s.cameraFollow}))} className={`w-10 h-5 rounded-full relative transition-colors ${settings.cameraFollow ? 'bg-blue-500' : 'bg-gray-700'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${settings.cameraFollow ? 'right-6' : 'right-1'}`} /></button></div>
-                <div className="flex items-center justify-between text-xs"><span>הצג כפתורי עכבר ב-HUD</span><button onClick={() => setSettings(s => ({...s, showMouseButtons: !s.showMouseButtons}))} className={`w-10 h-5 rounded-full relative transition-colors ${settings.showMouseButtons ? 'bg-blue-500' : 'bg-gray-700'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${settings.showMouseButtons ? 'right-6' : 'right-1'}`} /></button></div>
-                <div className="flex items-center justify-between text-xs"><span>הצג כפתורי מגע ב-HUD</span><button onClick={() => setSettings(s => ({...s, showTouchButtons: !s.showTouchButtons}))} className={`w-10 h-5 rounded-full relative transition-colors ${settings.showTouchButtons ? 'bg-blue-500' : 'bg-gray-700'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${settings.showTouchButtons ? 'right-6' : 'right-1'}`} /></button></div>
-              </div>
-
               <div className="space-y-4 pt-4 border-t border-white/5">
-                <div className="flex items-center gap-2 text-xs font-bold opacity-50 uppercase"><Layers size={14}/> גלריית לוחות</div>
-                <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto p-1 border border-white/5 rounded-xl">
+                <h3 className="text-xs font-bold opacity-50">גלריה</h3>
+                <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto">
                   {gallery.map((board) => (
                     <div key={board.id} className="aspect-video bg-black/40 rounded-lg border border-white/10 relative overflow-hidden group">
                       <img src={board.dataUrl} className="w-full h-full object-contain" alt="saved" />
                       <div className="absolute inset-0 bg-blue-500/80 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity gap-2">
-                        <button onClick={() => { const img = new Image(); img.onload = () => drawingCanvasRef.current?.getContext('2d')?.drawImage(img, 0, 0); img.src = board.dataUrl; }} title="הדבק לוח" className="p-1 bg-white/20 rounded hover:scale-110"><Copy size={14}/></button>
-                        <button onClick={() => { const a = document.createElement('a'); a.href = board.dataUrl; a.download = prompt("שם התיקייה/קובץ להורדה:", "board") + ".png"; a.click(); }} title="הורד לוח" className="p-1 bg-white/20 rounded hover:scale-110"><Download size={14}/></button>
+                        <button onClick={() => { const img = new Image(); img.onload = () => drawingCanvasRef.current?.getContext('2d')?.drawImage(img, 0, 0); img.src = board.dataUrl; }} className="p-1 bg-white/20 rounded"><Copy size={14}/></button>
                       </div>
                     </div>
                   ))}
                 </div>
-                {gallery.length >= 3 && (
-                   <button onClick={startCheatMode} className="w-full py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 animate-pulse transition-transform active:scale-95"><Zap size={16}/> מצב צ׳יט (כל הלוחות)</button>
-                )}
-              </div>
-
-              <div className="space-y-4 pt-4 border-t border-white/5">
-                <div className="flex items-center gap-2 text-xs font-bold opacity-50 uppercase"><Film size={14}/> גלריית הקלטות</div>
-                <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto">
-                   {videoGallery.map((rec) => (
-                      <div key={rec.id} className="bg-black/40 rounded-xl p-2 border border-white/5 flex items-center gap-3 group relative">
-                         <img src={rec.thumbnail} className="w-16 aspect-video object-cover rounded-lg" alt="rec" />
-                         <div className="flex-1">
-                            <p className="text-[10px] font-bold opacity-70">הקלטה {new Date(rec.timestamp).toLocaleTimeString()}</p>
-                            <p className="text-[10px] opacity-40">{rec.duration.toFixed(1)}s</p>
-                         </div>
-                         <button onClick={() => setViewingVideo(rec)} className="p-2 bg-white/5 hover:bg-blue-500 rounded-lg transition-colors"><Play size={12}/></button>
-                      </div>
-                   ))}
-                </div>
+                {gallery.length >= 3 && <button onClick={startCheatMode} className="w-full py-2 bg-red-600 rounded-xl font-bold flex items-center justify-center gap-2 animate-pulse"><Zap size={16}/> מצב צ׳יט</button>}
               </div>
             </div>
             <div className="p-6 bg-black/10 border-t border-white/5">
-               <button onClick={takeSnapshot} className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-95"><Camera size={20}/> צילום מהיר</button>
+               <button onClick={takeSnapshot} className="w-full py-4 bg-white/5 hover:bg-white/10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all"><Camera size={20}/> צילום מהיר</button>
             </div>
           </div>
         </div>
 
-        {/* Workspace */}
         <div ref={containerRef} className="flex-1 relative h-full bg-black cursor-crosshair" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={() => mouseIsDown.current = false} onContextMenu={e => e.preventDefault()}>
-          <video ref={videoRef} className="absolute hidden" />
+          <video ref={videoRef} className="absolute hidden" playsInline muted />
           <canvas ref={canvasRef} className="absolute inset-0 z-10" />
           <canvas ref={drawingCanvasRef} className="hidden" />
 
-          {!sidebarOpen && !hideUI && (
-            <button onClick={() => setSidebarOpen(true)} className="absolute top-6 right-6 z-50 p-3 bg-[#1e1e1e] rounded-full shadow-2xl border border-white/10 transition-transform active:scale-90"><ChevronLeft/></button>
-          )}
-          {sidebarOpen && (
-            <button onClick={() => setSidebarOpen(false)} className="absolute top-1/2 -translate-y-1/2 left-[345px] z-50 p-2 bg-[#1e1e1e] rounded-full shadow-xl border border-white/10 transition-all hover:scale-110"><ChevronRight/></button>
-          )}
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`absolute top-6 ${sidebarOpen ? 'left-[340px]' : 'right-6'} z-50 p-3 bg-[#1e1e1e] rounded-full border border-white/10`}>
+            {sidebarOpen ? <ChevronLeft/> : <ChevronRight/>}
+          </button>
 
           {loading && !cameraError && (
             <div className="absolute inset-0 flex items-center justify-center z-50 bg-[#0a0a0a]">
-              <div className="text-center space-y-4">
-                <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto" />
-                <p className="text-sm font-bold opacity-50 tracking-widest uppercase animate-pulse assistant-bold">Orel Studio Initializing...</p>
-              </div>
+              <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
             </div>
           )}
 
           {cameraError && (
-             <div className="absolute inset-0 flex items-center justify-center z-50 bg-[#0a0a0a]/90 backdrop-blur-sm p-8">
-                <div className="max-w-md w-full bg-[#1e1e1e] p-8 rounded-3xl border border-red-500/20 text-center space-y-6 shadow-2xl">
+             <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/90 p-8 text-center">
+                <div className="max-w-md space-y-6">
                    <AlertTriangle className="w-16 h-16 text-red-500 mx-auto" />
-                   <h2 className="text-2xl font-bold">שגיאת מצלמה</h2>
-                   <p className="text-sm opacity-60 leading-relaxed">{cameraError}</p>
-                   <button onClick={() => window.location.reload()} className="w-full py-3 bg-red-500 text-white rounded-xl font-bold transition-transform active:scale-95">נסה שוב</button>
+                   <h2 className="text-2xl font-bold">המצלמה חסומה</h2>
+                   <p className="opacity-60">הדפדפן חוסם את הגישה למצלמה. בדוק הרשאות או כבה חוסמי פרסומות.</p>
+                   <button onClick={() => window.location.reload()} className="w-full py-3 bg-red-500 rounded-xl font-bold">נסה שוב</button>
                 </div>
              </div>
           )}
 
-          {countdown !== null && (
-            <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md">
-              <div className="text-[12rem] font-black text-white animate-bounce shadow-2xl drop-shadow-2xl">{countdown}</div>
-            </div>
-          )}
+          {countdown !== null && <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 text-[12rem] font-black">{countdown}</div>}
 
           {showKeyboard && (
-            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 bg-[#1e1e1e]/95 p-4 rounded-2xl border border-white/10 shadow-2xl flex gap-3 animate-in slide-in-from-bottom">
-              <input autoFocus type="text" value={inputText} onChange={e => setInputText(e.target.value)} placeholder="הקלד כאן..." className="bg-black/50 p-2 rounded-lg outline-none border border-white/5 focus:border-blue-500 min-w-[200px] text-white" />
-              <button onClick={() => setShowKeyboard(false)} className="p-2 bg-blue-600 text-white rounded-lg transition-transform active:scale-90"><CheckCircle2 size={16}/></button>
+            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 bg-[#1e1e1e]/95 p-4 rounded-2xl border border-white/10 flex gap-3 animate-in slide-in-from-bottom">
+              <input autoFocus type="text" value={inputText} onChange={e => setInputText(e.target.value)} placeholder="הקלד כאן..." className="bg-black/50 p-2 rounded-lg text-white" />
+              <button onClick={() => { setTextLayers([...textLayers, { id: Date.now().toString(), text: inputText, x: canvasRef.current!.width/2, y: canvasRef.current!.height/2, color: activeColor.current, size: brushSize*3 }]); setShowKeyboard(false); }} className="p-2 bg-blue-600 rounded-lg"><CheckCircle2 size={16}/></button>
             </div>
           )}
 
           {capturedImage && (
-            <div className="absolute inset-0 z-[100] bg-black/90 flex items-center justify-center p-8 backdrop-blur-2xl animate-in zoom-in duration-300">
-              <div className="max-w-5xl w-full bg-[#1e1e1e] rounded-[40px] overflow-hidden border border-white/10 shadow-2xl flex flex-col md:flex-row">
-                <div className="flex-1 bg-black/40 p-4 relative group"><img src={capturedImage} className="w-full h-full object-contain rounded-2xl" alt="Captured" /></div>
-                <div className="w-full md:w-[320px] p-8 flex flex-col gap-6 bg-[#202020]">
-                  <div className="flex justify-between items-center"><h3 className="text-2xl font-bold text-blue-400">היצירה מוכנה!</h3><button onClick={() => setCapturedImage(null)} className="hover:rotate-90 transition-transform"><X/></button></div>
-                  <div className="space-y-3">
-                    <button onClick={() => { const a = document.createElement('a'); a.href = capturedImage; a.download = prompt("שם קובץ:", "orel_gold_art") + ".png"; a.click(); }} className="w-full py-4 bg-blue-600 text-white rounded-2xl flex items-center gap-3 px-4 font-bold hover:scale-105 transition-transform"><Download size={20} /> שמור תמונה</button>
-                    <button onClick={async () => { try { const res = await fetch(capturedImage); const blob = await res.blob(); await navigator.share({ files: [new File([blob], 'art.png', {type:'image/png'})] }); } catch(e){} }} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-3 px-4 transition-all"><Share2 size={18}/> שיתוף</button>
-                    <button onClick={() => setCapturedImage(null)} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl font-bold mt-4">חזרה לסטודיו</button>
-                  </div>
+            <div className="absolute inset-0 z-[100] bg-black/95 flex items-center justify-center p-8 backdrop-blur-2xl">
+              <div className="max-w-3xl w-full bg-[#1e1e1e] rounded-[40px] overflow-hidden border border-white/10 p-8 text-center space-y-6">
+                <img src={capturedImage} className="max-h-[60vh] mx-auto rounded-2xl" alt="Captured" />
+                <div className="flex gap-4">
+                  <button onClick={() => { const a = document.createElement('a'); a.href = capturedImage; a.download = "art.png"; a.click(); }} className="flex-1 py-4 bg-blue-600 rounded-2xl font-bold flex items-center justify-center gap-2"><Download size={20} /> שמור</button>
+                  <button onClick={() => setCapturedImage(null)} className="flex-1 py-4 bg-white/5 rounded-2xl font-bold">חזור</button>
                 </div>
               </div>
             </div>
           )}
-
-          {viewingVideo && (
-            <div className="absolute inset-0 z-[100] bg-black/95 flex items-center justify-center p-8 backdrop-blur-3xl animate-in slide-in-from-top duration-500">
-               <div className="max-w-4xl w-full bg-[#1e1e1e] rounded-[40px] overflow-hidden border border-white/10 shadow-2xl">
-                  <div className="relative aspect-video bg-black flex items-center justify-center">
-                      <video src={viewingVideo.url} controls autoPlay loop style={{ filter: `blur(0px)` }} className="max-h-full" />
-                      <div className="absolute bottom-4 right-4 text-white font-bold opacity-30 select-none pointer-events-none tracking-widest uppercase text-xs">Orel Studio Art</div>
-                      <div className="absolute top-4 left-4 flex flex-col gap-2">
-                         <button onClick={() => setViewingVideo(v => v ? {...v, speedMultiplier: v.speedMultiplier === 1 ? 2 : 1} : null)} className="p-3 bg-blue-600 text-white rounded-full flex items-center gap-2 text-xs font-bold shadow-xl active:scale-90"><FastForward size={14}/> {viewingVideo.speedMultiplier}x</button>
-                      </div>
-                  </div>
-                  <div className="p-8 flex items-center justify-between">
-                     <div className="flex flex-col">
-                        <h4 className="font-bold text-xl">צפייה בהקלטה</h4>
-                        <p className="text-xs opacity-40 assistant-bold uppercase">Produced by Orel Gold Studio</p>
-                     </div>
-                     <div className="flex gap-4">
-                        <button onClick={() => { const a = document.createElement('a'); a.href = viewingVideo.url; a.download = "orel_recording.webm"; a.click(); }} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold flex items-center gap-2 transition-transform hover:scale-105 active:scale-95"><Film size={18}/> הורד וידאו</button>
-                        <button onClick={() => setViewingVideo(null)} className="px-6 py-3 bg-white/5 rounded-xl font-bold transition-colors hover:bg-white/10">סגור</button>
-                     </div>
-                  </div>
-                  <div className="bg-black/40 py-4 overflow-hidden relative h-12">
-                     <div className="absolute whitespace-nowrap animate-marquee flex items-center gap-24">
-                        <span className="text-[10px] font-bold opacity-30 tracking-[0.3em] uppercase">Orel Gold Studio</span>
-                        <span className="text-[10px] font-bold opacity-30 tracking-[0.3em] uppercase">Created by Orel Gold</span>
-                        <span className="text-[10px] font-bold opacity-30 tracking-[0.3em] uppercase">Artistic Experience</span>
-                        <span className="text-[10px] font-bold opacity-30 tracking-[0.3em] uppercase">Orel Gold Studio</span>
-                     </div>
-                  </div>
-               </div>
-            </div>
-          )}
         </div>
       </div>
-
-      <footer className={`${settings.lightTheme ? 'bg-white border-t-gray-200 text-gray-600' : 'bg-[#121212] border-t-white/5 text-gray-400'} border-t py-4 px-8 z-50`}>
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-widest text-blue-500">נוצר על ידי אוראל גולד</span>
-            <span className="opacity-20">|</span>
-            <span className="text-[10px] opacity-60">Orel Gold © 2026</span>
-          </div>
-          <div className="flex flex-wrap justify-center gap-6 text-[11px] font-bold">
-            <a href="https://linktr.ee/orel_7" target="_blank" className="hover:text-blue-400 transition-colors flex items-center gap-1"><Info size={12}/> מרכז קישורים</a>
-            <a href="https://timerstosend.vercel.app/" target="_blank" className="hover:text-blue-400 transition-colors">אתר טיימרים</a>
-            <a href="https://orelgold7.blogspot.com/" target="_blank" className="hover:text-blue-400 transition-colors">הבלוג של אוראל</a>
-            <a href="https://gold3210.wixsite.com/orel" target="_blank" className="hover:text-blue-400 transition-colors">אתר ראשי</a>
-            <a href="https://docs.google.com/forms/d/e/1FAIpQLScf_p-paTd_NyDySZ6lgfDUaGdoMc0nEo_MQ3w2sPtsplXOrw/viewform" target="_blank" className="font-bold text-blue-400 transition-colors uppercase">Contact Us</a>
-          </div>
+      <footer className="bg-[#121212] border-t border-white/5 py-4 px-8 text-xs opacity-50 flex justify-between">
+        <span>Orel Gold © 2026</span>
+        <div className="flex gap-4">
+          <a href="https://linktr.ee/orel_7" target="_blank">מרכז קישורים</a>
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLScf_p-paTd_NyDySZ6lgfDUaGdoMc0nEo_MQ3w2sPtsplXOrw/viewform" target="_blank">צור קשר</a>
         </div>
       </footer>
     </div>

@@ -121,23 +121,23 @@ export interface VideoRecording {
   speedMultiplier: number;
 }
 
-/**
- * Interface for the AI Studio key selection utility.
- */
-// Fix: Renamed to AIStudio to match existing global type expectations and fix subsequent declaration error
-export interface AIStudio {
-  hasSelectedApiKey(): Promise<boolean>;
-  openSelectKey(): Promise<void>;
-}
-
 declare global {
+  /**
+   * Interface for the AI Studio key selection utility.
+   * Moved into global scope to ensure proper merging with existing environment types.
+   */
+  interface AIStudio {
+    hasSelectedApiKey(): Promise<boolean>;
+    openSelectKey(): Promise<void>;
+  }
+
   interface Window {
     Hands: any;
     Camera: any;
     drawConnectors: any;
     drawLandmarks: any;
     HAND_CONNECTIONS: any;
-    // Updated type to AIStudio and removed optionality to align with global declaration requirements
-    aistudio: AIStudio;
+    // Fix: Changed aistudio to optional and moved AIStudio interface to global to resolve modifier mismatch and type conflict errors.
+    aistudio?: AIStudio;
   }
 }
